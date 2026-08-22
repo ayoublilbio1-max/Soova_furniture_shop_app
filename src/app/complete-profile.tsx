@@ -4,24 +4,26 @@ import { useThemeColors } from "@/hooks/use-theme-colors";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-    Alert,
-    Image,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const COUNTRY_CODES = ["+1", "+44", "+33", "+212", "+91"];
 const GENDER_OPTIONS = ["Male", "Female", "Prefer not to say"];
 
 export default function CompleteProfile() {
   const colors = useThemeColors();
-  const styles = getStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = getStyles(colors, insets.bottom, insets.top);
   const params = useLocalSearchParams<{ source?: string; name?: string }>();
 
   const [showBanner, setShowBanner] = useState(!!params.source);
@@ -39,6 +41,16 @@ export default function CompleteProfile() {
       : params.source === "signin"
         ? "Login successful! Welcome back."
         : null;
+
+  useEffect(() => {
+    if (!showBanner) return;
+
+    const timer = setTimeout(() => {
+      setShowBanner(false);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [showBanner]);
 
   async function pickImage() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -239,13 +251,14 @@ export default function CompleteProfile() {
   );
 }
 
-function getStyles(colors: ThemeColors) {
+function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
       paddingHorizontal: 24,
       paddingTop: 50,
+      paddingBottom: bottomInset + 16,
     },
     circleOutline: {
       position: "absolute",
@@ -266,14 +279,23 @@ function getStyles(colors: ThemeColors) {
       right: -90,
     },
     banner: {
+      position: "absolute",
+      top: topInset + 12,
+      left: 16,
+      right: 16,
+      zIndex: 10,
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 12,
       paddingHorizontal: 16,
-      marginBottom: 16,
       gap: 10,
+      shadowColor: "#000",
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
     },
     bannerText: {
       flex: 1,

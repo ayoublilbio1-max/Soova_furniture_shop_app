@@ -3,8 +3,8 @@ import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -13,18 +13,34 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DEMO_EMAIL = "demo@gmail.com";
 const DEMO_PASSWORD = "Demo1234@";
 
 export default function SignIn() {
   const colors = useThemeColors();
-  const styles = getStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = getStyles(colors, insets.top);
+  const params = useLocalSearchParams<{ passwordReset?: string }>();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [demoModalVisible, setDemoModalVisible] = useState(false);
+  const [showBanner, setShowBanner] = useState(
+    params.passwordReset === "success",
+  );
+
+  useEffect(() => {
+    if (!showBanner) return;
+
+    const timer = setTimeout(() => {
+      setShowBanner(false);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [showBanner]);
 
   function openDemoModal() {
     setDemoModalVisible(true);
@@ -51,6 +67,16 @@ export default function SignIn() {
     <View style={styles.container}>
       <View style={[styles.circleOutline, styles.circleTopLeft]} />
       <View style={[styles.circleOutline, styles.circleBottomRight]} />
+
+      {showBanner && (
+        <View style={styles.banner}>
+          <Ionicons name="checkmark-circle" size={20} color={colors.onAccent} />
+          <Text style={styles.bannerText}>Password updated successfully!</Text>
+          <Pressable onPress={() => setShowBanner(false)}>
+            <Ionicons name="close" size={18} color={colors.onAccent} />
+          </Pressable>
+        </View>
+      )}
 
       <Text style={styles.heading}>Sign In</Text>
       <Text style={styles.subheading}>
@@ -101,7 +127,7 @@ export default function SignIn() {
         </Pressable>
       </View>
 
-      <Pressable onPress={openDemoModal}>
+      <Pressable onPress={() => router.push("/password-reset")}>
         <Text style={styles.forgotPassword}>Forgot Password?</Text>
       </Pressable>
 
@@ -173,7 +199,7 @@ export default function SignIn() {
   );
 }
 
-function getStyles(colors: ThemeColors) {
+function getStyles(colors: ThemeColors, topInset: number) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -198,6 +224,31 @@ function getStyles(colors: ThemeColors) {
       height: 220,
       bottom: -100,
       right: -100,
+    },
+    banner: {
+      position: "absolute",
+      top: topInset + 12,
+      left: 16,
+      right: 16,
+      zIndex: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.accent,
+      borderRadius: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      gap: 10,
+      shadowColor: "#000",
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    bannerText: {
+      flex: 1,
+      fontFamily: Fonts.medium,
+      fontSize: 13,
+      color: colors.onAccent,
     },
     heading: {
       fontFamily: Fonts.bold,
