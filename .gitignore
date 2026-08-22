@@ -41,3 +41,12 @@ example
 # generated native folders
 /ios
 /android
+
+# editor / tooling (local, machine-specific)
+.history/
+.claude/
+.vscode/
+
+# build artifacts
+*.apk
+*.aab

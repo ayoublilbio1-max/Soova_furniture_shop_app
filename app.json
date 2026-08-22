@@ -17,7 +17,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.ayoubghcoding.Soova"
     },
     "web": {
       "output": "static",
@@ -32,11 +36,45 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/DMSans-Light.ttf",
+            "./assets/fonts/DMSans-Regular.ttf",
+            "./assets/fonts/DMSans-Medium.ttf",
+            "./assets/fonts/DMSans-SemiBold.ttf",
+            "./assets/fonts/DMSans-Bold.ttf"
+          ]
+        }
+      ],
+      "expo-image",
+      [
+        "react-native-edge-to-edge",
+        {
+          "android": {
+            "parentTheme": "Default",
+            "enforceNavigationBarContrast": false
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Soova to access your photos to set a profile picture."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "833799ac-a2a4-4815-9344-504cf8446d0d"
+      }
     }
   }
 }
