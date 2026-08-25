@@ -7,6 +7,7 @@ export interface ThemeColors {
   outline: string;
   placeholder: string;
   placeholderAlt: string;
+  cardBackground: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -18,6 +19,7 @@ export const lightColors: ThemeColors = {
   outline: "#E4D5C4",
   placeholder: "#D8C4AE",
   placeholderAlt: "#C9B49B",
+  cardBackground: "#F0E5D6",
 };
 
 export const darkColors: ThemeColors = {
@@ -29,4 +31,5 @@ export const darkColors: ThemeColors = {
   outline: "#3A2F26",
   placeholder: "#4A3C30",
   placeholderAlt: "#5A4A3C",
+  cardBackground: "#5D4C3D",
 };

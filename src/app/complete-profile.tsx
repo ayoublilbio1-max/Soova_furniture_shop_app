@@ -75,17 +75,11 @@ export default function CompleteProfile() {
   }
 
   function handleCompleteProfile() {
-    Alert.alert(
-      "Profile completed",
-      "This will continue once the main app is built.",
-    );
+    router.push("/location-access");
   }
 
   function handleSkip() {
-    Alert.alert(
-      "Skipped",
-      "You can complete your profile later from settings.",
-    );
+    router.push("/location-access");
   }
 
   return (
