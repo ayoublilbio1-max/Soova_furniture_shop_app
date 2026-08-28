@@ -8,10 +8,14 @@ export type Product = {
   createdAt: string;
   rating: number;
   salesCount: number;
+  style?: "modern" | "vintage";
+  salePercent?: number;
+  isTopDeal?: boolean;
 };
 
-// NOTE: names, prices, ratings, sales counts, and dates are still
-// placeholders — replace with your real product data whenever you're ready.
+// NOTE: names, prices, ratings, sales counts, dates, style tags, and sale
+// percentages are still placeholders — replace with your real product data
+// whenever you're ready.
 export const products: Product[] = [
   {
     id: "chair-01",
@@ -23,6 +27,9 @@ export const products: Product[] = [
     createdAt: "2026-08-20",
     rating: 4.6,
     salesCount: 42,
+    style: "modern",
+    salePercent: 20,
+    isTopDeal: true,
   },
   {
     id: "chair-02",
@@ -34,6 +41,8 @@ export const products: Product[] = [
     createdAt: "2026-07-15",
     rating: 4.2,
     salesCount: 78,
+    style: "vintage",
+    salePercent: 69,
   },
   {
     id: "chair-03",
@@ -45,6 +54,8 @@ export const products: Product[] = [
     createdAt: "2026-08-22",
     rating: 4.9,
     salesCount: 15,
+    style: "modern",
+    isTopDeal: true,
   },
   {
     id: "chair-04",
@@ -56,6 +67,7 @@ export const products: Product[] = [
     createdAt: "2026-06-10",
     rating: 4.0,
     salesCount: 120,
+    style: "vintage",
   },
   {
     id: "chair-05",
@@ -67,6 +79,8 @@ export const products: Product[] = [
     createdAt: "2026-08-05",
     rating: 4.7,
     salesCount: 33,
+    style: "modern",
+    salePercent: 15,
   },
   {
     id: "chair-06",
@@ -78,6 +92,8 @@ export const products: Product[] = [
     createdAt: "2026-05-28",
     rating: 3.9,
     salesCount: 95,
+    style: "vintage",
+    isTopDeal: true,
   },
   {
     id: "chair-07",
@@ -89,6 +105,9 @@ export const products: Product[] = [
     createdAt: "2026-08-23",
     rating: 5.0,
     salesCount: 61,
+    style: "modern",
+    salePercent: 30,
+    isTopDeal: true,
   },
   {
     id: "chair-08",
@@ -100,5 +119,6 @@ export const products: Product[] = [
     createdAt: "2026-04-12",
     rating: 4.4,
     salesCount: 150,
+    style: "vintage",
   },
 ];

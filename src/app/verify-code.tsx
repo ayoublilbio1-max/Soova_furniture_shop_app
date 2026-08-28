@@ -27,7 +27,7 @@ export default function VerifyCode() {
   useEffect(() => {
     const autofillTimer = setTimeout(() => {
       setDigits(activeCode.split(""));
-    }, 3000);
+    }, 1000);
 
     const countdown = setInterval(() => {
       setSecondsLeft((prev) => Math.max(prev - 1, 0));
@@ -211,7 +211,7 @@ function getStyles(colors: ThemeColors) {
       width: 56,
       height: 64,
       borderRadius: 16,
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       textAlign: "center",
       fontFamily: Fonts.semiBold,
       fontSize: 22,

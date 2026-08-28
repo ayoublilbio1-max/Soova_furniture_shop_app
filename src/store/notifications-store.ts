@@ -7,6 +7,7 @@ export type NotificationItem = {
   title: string;
   message: string;
   time: string;
+  createdAt: string;
   isRead: boolean;
 };
 
@@ -18,6 +19,9 @@ type NotificationsState = {
   bulkDelete: (ids: string[]) => void;
 };
 
+const hoursAgo = (hours: number) =>
+  new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: "n1",
@@ -26,6 +30,7 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     message:
       "Your order #SF-10482 has shipped and is on its way. Estimated delivery in 3-5 business days.",
     time: "2h ago",
+    createdAt: hoursAgo(2),
     isRead: false,
   },
   {
@@ -35,6 +40,7 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     message:
       "Up to 50% off selected chairs, for a limited time. Don't miss out on this weekend's deals.",
     time: "5h ago",
+    createdAt: hoursAgo(5),
     isRead: false,
   },
   {
@@ -44,6 +50,17 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     message:
       "Complete your profile to get personalized picks and faster checkout on future orders.",
     time: "1d ago",
+    createdAt: hoursAgo(28),
+    isRead: true,
+  },
+  {
+    id: "n4",
+    icon: "pricetag-outline",
+    title: "Price Drop Alert",
+    message:
+      "An item in your wishlist just dropped in price. Grab it before the deal ends.",
+    time: "3d ago",
+    createdAt: hoursAgo(72),
     isRead: true,
   },
 ];
@@ -53,7 +70,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   markAsRead: (id, read) =>
     set((state) => ({
       notifications: state.notifications.map((item) =>
-        item.id === id ? { ...item, isRead: read } : item
+        item.id === id ? { ...item, isRead: read } : item,
       ),
     })),
   deleteOne: (id) =>
@@ -63,13 +80,13 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   bulkMarkAsRead: (ids) =>
     set((state) => ({
       notifications: state.notifications.map((item) =>
-        ids.includes(item.id) ? { ...item, isRead: true } : item
+        ids.includes(item.id) ? { ...item, isRead: true } : item,
       ),
     })),
   bulkDelete: (ids) =>
     set((state) => ({
       notifications: state.notifications.filter(
-        (item) => !ids.includes(item.id)
+        (item) => !ids.includes(item.id),
       ),
     })),
 }));

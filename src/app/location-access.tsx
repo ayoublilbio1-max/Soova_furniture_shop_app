@@ -134,7 +134,7 @@ function getStyles(colors: ThemeColors) {
       width: 140,
       height: 140,
       borderRadius: 70,
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       alignItems: "center",
       justifyContent: "center",
     },

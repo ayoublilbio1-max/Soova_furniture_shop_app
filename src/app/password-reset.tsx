@@ -5,12 +5,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 const DEMO_EMAIL = "demo@gmail.com";
@@ -176,7 +176,7 @@ function getStyles(colors: ThemeColors) {
     inputWrapper: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
       paddingHorizontal: 16,
       height: 56,

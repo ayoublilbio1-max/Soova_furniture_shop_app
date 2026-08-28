@@ -2,11 +2,13 @@ import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { Ionicons } from "@expo/vector-icons";
+import * as countryCodesList from "country-codes-list";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -17,7 +19,31 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const COUNTRY_CODES = ["+1", "+44", "+33", "+212", "+91"];
+type Country = {
+  isoCode: string;
+  name: string;
+  dialCode: string;
+};
+
+function getFlagEmoji(isoCode: string) {
+  return isoCode
+    .toUpperCase()
+    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+const ALL_COUNTRIES: Country[] = Object.entries(
+  countryCodesList.customList(
+    "countryCode",
+    "{countryNameEn}|{countryCallingCode}",
+  ),
+)
+  .map(([isoCode, value]) => {
+    const [name, dialCode] = (value as string).split("|");
+    return { isoCode, name, dialCode: `+${dialCode}` };
+  })
+  .filter((c) => c.name && c.dialCode !== "+")
+  .sort((a, b) => a.name.localeCompare(b.name));
+
 const GENDER_OPTIONS = ["Male", "Female", "Prefer not to say"];
 
 export default function CompleteProfile() {
@@ -29,11 +55,22 @@ export default function CompleteProfile() {
   const [showBanner, setShowBanner] = useState(!!params.source);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [name, setName] = useState(params.name ?? "");
-  const [countryCode, setCountryCode] = useState("+1");
+  const [selectedCountry, setSelectedCountry] = useState<Country>(
+    ALL_COUNTRIES.find((c) => c.isoCode === "US") ?? ALL_COUNTRIES[0],
+  );
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const [genderModalVisible, setGenderModalVisible] = useState(false);
+
+  const filteredCountries = useMemo(() => {
+    if (!countrySearch.trim()) return ALL_COUNTRIES;
+    const query = countrySearch.trim().toLowerCase();
+    return ALL_COUNTRIES.filter(
+      (c) => c.name.toLowerCase().includes(query) || c.dialCode.includes(query),
+    );
+  }, [countrySearch]);
 
   const bannerMessage =
     params.source === "signup"
@@ -80,6 +117,12 @@ export default function CompleteProfile() {
 
   function handleSkip() {
     router.push("/location-access");
+  }
+
+  function selectCountry(country: Country) {
+    setSelectedCountry(country);
+    setCountryModalVisible(false);
+    setCountrySearch("");
   }
 
   return (
@@ -143,7 +186,10 @@ export default function CompleteProfile() {
           style={styles.countryCodeButton}
           onPress={() => setCountryModalVisible(true)}
         >
-          <Text style={styles.countryCodeText}>{countryCode}</Text>
+          <Text style={styles.countryFlag}>
+            {getFlagEmoji(selectedCountry.isoCode)}
+          </Text>
+          <Text style={styles.countryCodeText}>{selectedCountry.dialCode}</Text>
           <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
         </Pressable>
         <View style={styles.phoneInputWrapper}>
@@ -191,28 +237,57 @@ export default function CompleteProfile() {
       <Modal
         transparent
         visible={countryModalVisible}
-        animationType="fade"
-        onRequestClose={() => setCountryModalVisible(false)}
+        animationType="slide"
+        onRequestClose={() => {
+          setCountryModalVisible(false);
+          setCountrySearch("");
+        }}
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setCountryModalVisible(false)}
-        >
-          <View style={styles.optionsCard}>
-            {COUNTRY_CODES.map((code) => (
+        <View style={styles.countryModalBackdrop}>
+          <View style={styles.countryModalCard}>
+            <View style={styles.countryModalHeader}>
+              <Text style={styles.countryModalTitle}>Select Country</Text>
               <Pressable
-                key={code}
-                style={styles.optionRow}
                 onPress={() => {
-                  setCountryCode(code);
                   setCountryModalVisible(false);
+                  setCountrySearch("");
                 }}
               >
-                <Text style={styles.optionText}>{code}</Text>
+                <Ionicons name="close" size={22} color={colors.textPrimary} />
               </Pressable>
-            ))}
+            </View>
+
+            <View style={styles.countrySearchWrapper}>
+              <Ionicons name="search" size={18} color={colors.textMuted} />
+              <TextInput
+                style={styles.countrySearchInput}
+                placeholder="Search country or code"
+                placeholderTextColor={colors.textMuted}
+                value={countrySearch}
+                onChangeText={setCountrySearch}
+                autoFocus
+              />
+            </View>
+
+            <FlatList
+              data={filteredCountries}
+              keyExtractor={(item) => item.isoCode}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.countryOptionRow}
+                  onPress={() => selectCountry(item)}
+                >
+                  <Text style={styles.countryFlag}>
+                    {getFlagEmoji(item.isoCode)}
+                  </Text>
+                  <Text style={styles.countryOptionName}>{item.name}</Text>
+                  <Text style={styles.countryOptionCode}>{item.dialCode}</Text>
+                </Pressable>
+              )}
+            />
           </View>
-        </Pressable>
+        </View>
       </Modal>
 
       <Modal
@@ -328,7 +403,7 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
       width: 140,
       height: 140,
       borderRadius: 70,
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
@@ -359,7 +434,7 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
     inputWrapper: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
       paddingHorizontal: 16,
       height: 56,
@@ -382,11 +457,14 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
     countryCodeButton: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
-      paddingHorizontal: 14,
+      paddingHorizontal: 12,
       height: 56,
       gap: 6,
+    },
+    countryFlag: {
+      fontSize: 18,
     },
     countryCodeText: {
       fontFamily: Fonts.medium,
@@ -395,7 +473,7 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
     },
     phoneInputWrapper: {
       flex: 1,
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
       paddingHorizontal: 16,
       height: 56,
@@ -445,6 +523,65 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
       fontFamily: Fonts.regular,
       fontSize: 15,
       color: colors.textPrimary,
+    },
+    countryModalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    countryModalCard: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 20,
+      paddingHorizontal: 20,
+      height: "75%",
+    },
+    countryModalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    countryModalTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+    },
+    countrySearchWrapper: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      height: 48,
+      marginBottom: 16,
+    },
+    countrySearchInput: {
+      flex: 1,
+      fontFamily: Fonts.regular,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    countryOptionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.outline,
+    },
+    countryOptionName: {
+      flex: 1,
+      fontFamily: Fonts.regular,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    countryOptionCode: {
+      fontFamily: Fonts.medium,
+      fontSize: 14,
+      color: colors.textMuted,
     },
   });
 }

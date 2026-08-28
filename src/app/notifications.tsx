@@ -7,25 +7,36 @@ import {
 } from "@/store/notifications-store";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  FlatList,
-  LayoutAnimation,
-  Platform,
   Pressable,
+  SectionList,
   StyleSheet,
   Text,
-  UIManager,
   View,
 } from "react-native";
 
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+function getDateGroupLabel(isoDate: string) {
+  const date = new Date(isoDate);
+  const now = new Date();
+
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+  const diffDays = Math.round(
+    (startOfDay(now) - startOfDay(date)) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 type NotificationRowProps = {
@@ -175,9 +186,26 @@ export default function Notifications() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  function animateNext() {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-  }
+  const sections = useMemo(() => {
+    const sorted = [...notifications].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    const groups = new Map<string, NotificationItem[]>();
+    for (const item of sorted) {
+      const label = getDateGroupLabel(item.createdAt);
+      if (!groups.has(label)) {
+        groups.set(label, []);
+      }
+      groups.get(label)!.push(item);
+    }
+
+    return Array.from(groups.entries()).map(([title, data]) => ({
+      title,
+      data,
+    }));
+  }, [notifications]);
 
   function openNotification(id: string, isRead: boolean) {
     if (!isRead) {
@@ -225,7 +253,6 @@ export default function Notifications() {
   }
 
   function handleBulkDelete() {
-    animateNext();
     bulkDelete(Array.from(selectedIds));
     exitSelectionMode();
   }
@@ -283,21 +310,28 @@ export default function Notifications() {
           <Text style={styles.emptyText}>No notifications</Text>
         </View>
       ) : (
-        <FlatList
-          data={notifications}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <NotificationRow
-              item={item}
-              colors={colors}
-              styles={styles}
-              selectionMode={selectionMode}
-              selected={selectedIds.has(item.id)}
-              onPress={() => handleRowPress(item.id, item.isRead)}
-              onLongPress={() => handleRowLongPress(item.id)}
-            />
+          renderSectionHeader={({ section: { title } }) => (
+            <Text style={styles.sectionHeader}>{title}</Text>
           )}
+          renderItem={({ item }) => {
+            const selected = selectedIds.has(item.id);
+
+            return (
+              <NotificationRow
+                item={item}
+                colors={colors}
+                styles={styles}
+                selectionMode={selectionMode}
+                selected={selected}
+                onPress={() => handleRowPress(item.id, item.isRead)}
+                onLongPress={() => handleRowLongPress(item.id)}
+              />
+            );
+          }}
         />
       )}
     </View>
@@ -349,11 +383,18 @@ function getStyles(colors: ThemeColors) {
       paddingHorizontal: 24,
       paddingBottom: 40,
     },
+    sectionHeader: {
+      fontFamily: Fonts.bold,
+      fontSize: 14,
+      color: colors.textMuted,
+      backgroundColor: colors.background,
+      paddingVertical: 10,
+    },
     row: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
       borderWidth: 1.5,
       padding: 14,

@@ -273,7 +273,7 @@ function getStyles(colors: ThemeColors, topInset: number) {
     inputWrapper: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
       paddingHorizontal: 16,
       height: 56,

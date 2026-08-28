@@ -129,7 +129,7 @@ function getStyles(colors: ThemeColors) {
       flexDirection: "row",
       alignItems: "center",
       gap: 14,
-      backgroundColor: colors.placeholder,
+      backgroundColor: colors.cardBackground,
       borderRadius: 16,
       padding: 16,
       marginBottom: 12,
