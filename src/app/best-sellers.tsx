@@ -1,11 +1,16 @@
 // Best Sellers screen — reached from Home's "See All" next to Best Sellers.
-// Category filter chips show real per-category counts; grid sorted by salesCount.
+// Category filter chips show real per-category counts (sofa subtypes grouped
+// together); every card here shows the "Best Seller" badge unconditionally.
 
+import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { categories } from "@/data/categories";
+import { matchesCategoryFilter } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
+import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -15,6 +20,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  InteractionManager,
   Pressable,
   StyleSheet,
   Text,
@@ -81,7 +87,7 @@ function CategoryFilterChip({
   );
 }
 
-// --- Product grid card with working wishlist/cart buttons ---
+// --- Product grid card: badges, title, sale/rating, price/cart ---
 function BestSellerCard({
   item,
   colors,
@@ -130,7 +136,23 @@ function BestSellerCard({
 
   return (
     <View style={styles.productCard}>
-      <RemoteImage path={item.thumbPath} style={styles.productImage} />
+      <View style={styles.badgeStack}>
+        {item.isTopDeal && (
+          <View style={styles.topDealSticker}>
+            <Text style={styles.topDealText}>Top Deal</Text>
+          </View>
+        )}
+        {/* Every card on this screen is a best seller by definition */}
+        <View style={styles.bestSellerSticker}>
+          <Text style={styles.bestSellerText}>Best Seller</Text>
+        </View>
+      </View>
+
+      <RemoteImage
+        uri={item.thumbPath}
+        fallbackUri={item.fallbackThumbPath}
+        style={styles.productImage}
+      />
       <AnimatedPressable
         style={[
           styles.wishlistButton,
@@ -144,13 +166,27 @@ function BestSellerCard({
           color={isWishlisted ? WISHLIST_ACTIVE_COLOR : colors.accent}
         />
       </AnimatedPressable>
-      <View style={styles.productNameRow}>
-        <Text style={styles.productName}>{item.name}</Text>
+
+      <Text style={styles.productName}>{item.name}</Text>
+
+      {item.salePercent ? (
+        <>
+          <View style={styles.saleRow}>
+            <Text style={styles.saleText}>Sale -{item.salePercent}%</Text>
+            <Ionicons name="arrow-down" size={12} color="#FF2C2C" />
+          </View>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={12} color="#F5A623" />
+            <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+          </View>
+        </>
+      ) : (
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={12} color="#F5A623" />
           <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
         </View>
-      </View>
+      )}
+
       <View style={styles.productFooter}>
         <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
         <AnimatedPressable
@@ -167,30 +203,50 @@ function BestSellerCard({
 export default function BestSellers() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
+
+  // --- Defers building the heavy grid until the push transition has
+  // finished, so the skeleton is what paints instantly on tap ---
+  const ready = useDeferredReady();
+
   const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [categoryTransitioning, setCategoryTransitioning] = useState(false);
 
   const sorted = useMemo(
     () => [...products].sort((a, b) => b.salesCount - a.salesCount),
     [],
   );
 
-  // --- Real per-category counts, no invented numbers ---
+  // --- Real per-category counts, sofa subtypes grouped under "sofa" ---
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const category of categories) {
-      counts[category.id] = 0;
-    }
-    for (const product of products) {
-      counts[product.category] = (counts[product.category] ?? 0) + 1;
+      counts[category.id] = products.filter((product) =>
+        matchesCategoryFilter(product.category, category.id),
+      ).length;
     }
     return counts;
   }, []);
 
   const filtered = useMemo(() => {
     if (!activeCategory) return sorted;
-    return sorted.filter((item) => item.category === activeCategory);
+    return sorted.filter((item) =>
+      matchesCategoryFilter(item.category, activeCategory),
+    );
   }, [sorted, activeCategory]);
+
+  // --- Show the grid skeleton for a beat after switching category chips ---
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setCategoryTransitioning(false);
+    });
+    return () => task.cancel();
+  }, [activeCategory]);
+
+  function handleCategoryPress(id: string | null) {
+    setCategoryTransitioning(true);
+    setActiveCategory(id);
+  }
 
   function toggleWishlist(id: string) {
     setWishlisted((prev) => {
@@ -202,6 +258,30 @@ export default function BestSellers() {
       }
       return next;
     });
+  }
+
+  if (!ready) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Best Sellers</Text>
+          <View style={styles.backButton} />
+        </View>
+        <View style={styles.categoryChipsRow}>
+          <Skeleton width={70} height={30} borderRadius={20} />
+          <Skeleton width={90} height={30} borderRadius={20} />
+          <Skeleton width={90} height={30} borderRadius={20} />
+          <Skeleton width={80} height={30} borderRadius={20} />
+          <Skeleton width={100} height={30} borderRadius={20} />
+        </View>
+        <View style={styles.listContent}>
+          <ProductGridSkeleton rows={4} />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -230,13 +310,17 @@ export default function BestSellers() {
             active={activeCategory === item.id}
             colors={colors}
             styles={styles}
-            onPress={() => setActiveCategory(item.id)}
+            onPress={() => handleCategoryPress(item.id)}
           />
         )}
       />
 
       {/* --- Product grid --- */}
-      {filtered.length === 0 ? (
+      {categoryTransitioning ? (
+        <View style={styles.listContent}>
+          <ProductGridSkeleton rows={4} />
+        </View>
+      ) : filtered.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="cube-outline" size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>
@@ -326,6 +410,38 @@ function getStyles(colors: ThemeColors) {
       borderRadius: 20,
       padding: 12,
     },
+
+    // --- Badge stack (Top Deal / Best Seller), stacked top-left ---
+    badgeStack: {
+      position: "absolute",
+      top: 20,
+      left: 20,
+      zIndex: 1,
+      gap: 4,
+    },
+    topDealSticker: {
+      backgroundColor: "#FF2C2C",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    topDealText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+    bestSellerSticker: {
+      backgroundColor: "#FF9900",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    bestSellerText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+
     productImage: {
       width: "100%",
       height: 140,
@@ -343,28 +459,37 @@ function getStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
     },
-    productNameRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 6,
-    },
+
+    // --- Title / sale / rating stack ---
     productName: {
-      flex: 1,
       fontFamily: Fonts.semiBold,
       fontSize: 13,
       color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    saleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      marginBottom: 4,
+    },
+    saleText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 11,
+      color: "#FF2C2C",
     },
     ratingRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 3,
+      marginBottom: 6,
     },
     ratingText: {
       fontFamily: Fonts.medium,
       fontSize: 12,
       color: colors.textMuted,
     },
+
     productFooter: {
       flexDirection: "row",
       justifyContent: "space-between",

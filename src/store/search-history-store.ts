@@ -1,3 +1,5 @@
+// Persisted recent-search and recent-view history for the Search screen.
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -8,6 +10,7 @@ export type RecentViewProduct = {
   category: string;
   price: number;
   thumbPath: string;
+  fallbackThumbPath: string;
 };
 
 type SearchHistoryState = {

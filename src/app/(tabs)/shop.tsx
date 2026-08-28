@@ -1,10 +1,14 @@
 // Shop tab — search + photo search, Explore/New Sale/Vintage/Modern tabs,
 // promo banner with countdown, sale coupons row, infinite-scroll product grid.
 
+import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
+import { ShopSkeleton } from "@/components/ui/shop-skeleton";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
+import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
+import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -17,6 +21,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  InteractionManager,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -234,7 +239,7 @@ function CouponCard({
   );
 }
 
-// --- Product grid card: top-deal sticker, name/rating, sale badge, price/cart ---
+// --- Product grid card: badges, title, sale/rating, price/cart ---
 type ShopProductCardProps = {
   item: Product;
   colors: ThemeColors;
@@ -254,6 +259,7 @@ function ShopProductCard({
 }: ShopProductCardProps) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
+  const isBestSeller = bestSellerIds.has(item.id);
 
   function popAnimation(anim: Animated.Value) {
     Animated.sequence([
@@ -284,12 +290,24 @@ function ShopProductCard({
 
   return (
     <View style={styles.productCard}>
-      {item.isTopDeal && (
-        <View style={styles.topDealSticker}>
-          <Text style={styles.topDealText}>Top Deal</Text>
-        </View>
-      )}
-      <RemoteImage path={item.thumbPath} style={styles.productImage} />
+      <View style={styles.badgeStack}>
+        {item.isTopDeal && (
+          <View style={styles.topDealSticker}>
+            <Text style={styles.topDealText}>Top Deal</Text>
+          </View>
+        )}
+        {isBestSeller && (
+          <View style={styles.bestSellerSticker}>
+            <Text style={styles.bestSellerText}>Best Seller</Text>
+          </View>
+        )}
+      </View>
+
+      <RemoteImage
+        uri={item.thumbPath}
+        fallbackUri={item.fallbackThumbPath}
+        style={styles.productImage}
+      />
       <AnimatedPressable
         style={[
           styles.wishlistButton,
@@ -304,18 +322,23 @@ function ShopProductCard({
         />
       </AnimatedPressable>
 
-      <View style={styles.productNameRow}>
-        <Text style={styles.productName}>{item.name}</Text>
+      <Text style={styles.productName}>{item.name}</Text>
+
+      {item.salePercent ? (
+        <>
+          <View style={styles.saleRow}>
+            <Text style={styles.saleText}>Sale -{item.salePercent}%</Text>
+            <Ionicons name="arrow-down" size={12} color="#FF2C2C" />
+          </View>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={12} color="#F5A623" />
+            <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+          </View>
+        </>
+      ) : (
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={12} color="#F5A623" />
           <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
-        </View>
-      </View>
-
-      {item.salePercent && (
-        <View style={styles.saleRow}>
-          <Text style={styles.saleText}>Sale -{item.salePercent}%</Text>
-          <Ionicons name="arrow-down" size={12} color="#FF2C2C" />
         </View>
       )}
 
@@ -336,8 +359,13 @@ export default function Shop() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
 
+  // --- Defers building the heavy content below until the tab transition
+  // has finished, so the skeleton (cheap) is what paints instantly on tap ---
+  const ready = useDeferredReady();
+
   // --- Screen state ---
   const [activeTab, setActiveTab] = useState<TabId>("explore");
+  const [tabTransitioning, setTabTransitioning] = useState(false);
   const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -361,6 +389,20 @@ export default function Shop() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [activeTab]);
+
+  // --- Show the grid skeleton for a beat after switching tabs, so the
+  // heavy re-render of up to 10 fresh cards doesn't block the tap feedback ---
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setTabTransitioning(false);
+    });
+    return () => task.cancel();
+  }, [activeTab]);
+
+  function handleTabPress(id: TabId) {
+    setTabTransitioning(true);
+    setActiveTab(id);
+  }
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   const hasMore = visibleCount < filteredProducts.length;
@@ -420,10 +462,18 @@ export default function Shop() {
     }
   }
 
+  if (!ready) {
+    return (
+      <View style={styles.screen}>
+        <ShopSkeleton />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <FlatList
-        data={visibleProducts}
+        data={tabTransitioning ? [] : visibleProducts}
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={styles.productRow}
@@ -468,7 +518,7 @@ export default function Shop() {
                   active={activeTab === tab.id}
                   colors={colors}
                   styles={styles}
-                  onPress={() => setActiveTab(tab.id)}
+                  onPress={() => handleTabPress(tab.id)}
                 />
               ))}
             </ScrollView>
@@ -529,12 +579,20 @@ export default function Shop() {
           ) : null
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={40} color={colors.textMuted} />
-            <Text style={styles.emptyText}>
-              No products in this category yet
-            </Text>
-          </View>
+          tabTransitioning ? (
+            <ProductGridSkeleton rows={4} />
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="cube-outline"
+                size={40}
+                color={colors.textMuted}
+              />
+              <Text style={styles.emptyText}>
+                No products in this category yet
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <ShopProductCard
@@ -776,11 +834,16 @@ function getStyles(colors: ThemeColors) {
       borderRadius: 20,
       padding: 12,
     },
-    topDealSticker: {
+
+    // --- Badge stack (Top Deal / Best Seller), stacked top-left ---
+    badgeStack: {
       position: "absolute",
       top: 20,
       left: 20,
       zIndex: 1,
+      gap: 4,
+    },
+    topDealSticker: {
       backgroundColor: "#FF2C2C",
       borderRadius: 8,
       paddingHorizontal: 8,
@@ -791,6 +854,18 @@ function getStyles(colors: ThemeColors) {
       fontSize: 10,
       color: "#FFFFFF",
     },
+    bestSellerSticker: {
+      backgroundColor: "#FF9900",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    bestSellerText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+
     productImage: {
       width: "100%",
       height: 140,
@@ -808,39 +883,37 @@ function getStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
     },
-    productNameRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 4,
-    },
+
+    // --- Title / sale / rating stack ---
     productName: {
-      flex: 1,
       fontFamily: Fonts.semiBold,
       fontSize: 13,
       color: colors.textPrimary,
-    },
-    ratingRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 3,
-    },
-    ratingText: {
-      fontFamily: Fonts.medium,
-      fontSize: 12,
-      color: colors.textMuted,
+      marginBottom: 4,
     },
     saleRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 3,
-      marginBottom: 6,
+      marginBottom: 4,
     },
     saleText: {
       fontFamily: Fonts.semiBold,
       fontSize: 11,
       color: "#FF2C2C",
     },
+    ratingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      marginBottom: 6,
+    },
+    ratingText: {
+      fontFamily: Fonts.medium,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+
     productFooter: {
       flexDirection: "row",
       justifyContent: "space-between",

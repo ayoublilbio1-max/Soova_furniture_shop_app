@@ -1,11 +1,16 @@
 // Home tab — location header, search, promo banner carousel, category
 // shortcuts, flash sale, sort/filter product grid, best sellers, shipping banner.
 
+import { HomeSkeleton } from "@/components/ui/home-skeleton";
+import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
+import { ScrollProgressBar } from "@/components/ui/scroll-progress-bar";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { categories } from "@/data/categories";
+import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
+import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -14,9 +19,8 @@ import {
   Alert,
   Animated,
   Easing,
+  InteractionManager,
   Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,14 +42,34 @@ const RATING_OPTIONS = [
 ];
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-// Banner slides now store a relative bucket path instead of a full URL, so
-// RemoteImage can apply its retry/fallback logic the same way it does for
-// products.
+// Promo banner images live outside product data (they're editorial, not
+// product photos), so they carry their own explicit primary/fallback URLs.
+const SUPABASE_GENERAL_BASE =
+  "https://limjfxtziyciiyxjuyyh.supabase.co/storage/v1/object/public/product-images/product-images";
+const CLOUDFLARE_GENERAL_BASE =
+  "https://pub-e5c0dd26c2e74f5686552a5198a41513.r2.dev";
+
 const BANNER_SLIDES = [
-  { id: "wine-sofa", path: "one_seater_sofa/sofa_07/color_wine_07_full.webp" },
-  { id: "coffee-sofa", path: "two_seater_sofa/sofa_03/color_coffe_full.webp" },
-  { id: "sofa-04", path: "one_seater_sofa/sofa_04/product_04_a_full.webp" },
-  { id: "sofa-06", path: "one_seater_sofa/sofa_06/product_06_a_full.webp" },
+  {
+    id: "wine-sofa",
+    uri: `${SUPABASE_GENERAL_BASE}/one_seater_sofa/sofa_07/color_wine_07_full.webp`,
+    fallbackUri: `${CLOUDFLARE_GENERAL_BASE}/one_seater_sofa/sofa_07/color_wine_07_full.webp`,
+  },
+  {
+    id: "coffee-sofa",
+    uri: `${SUPABASE_GENERAL_BASE}/two_seater_sofa/sofa_03/color_coffe_full.webp`,
+    fallbackUri: `${CLOUDFLARE_GENERAL_BASE}/two_seater_sofa/sofa_03/color_coffe_full.webp`,
+  },
+  {
+    id: "sofa-04",
+    uri: `${SUPABASE_GENERAL_BASE}/one_seater_sofa/sofa_04/product_04_a_full.webp`,
+    fallbackUri: `${CLOUDFLARE_GENERAL_BASE}/one_seater_sofa/sofa_04/product_04_a_full.webp`,
+  },
+  {
+    id: "sofa-06",
+    uri: `${SUPABASE_GENERAL_BASE}/one_seater_sofa/sofa_06/product_06_a_full.webp`,
+    fallbackUri: `${CLOUDFLARE_GENERAL_BASE}/one_seater_sofa/sofa_06/product_06_a_full.webp`,
+  },
 ];
 
 type FilterState = {
@@ -82,6 +106,7 @@ function ProductCard({
 }: ProductCardProps) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
+  const isBestSeller = bestSellerIds.has(item.id);
 
   function popAnimation(anim: Animated.Value) {
     Animated.sequence([
@@ -112,7 +137,24 @@ function ProductCard({
 
   return (
     <View style={styles.productCard}>
-      <RemoteImage path={item.thumbPath} style={styles.productImage} />
+      <View style={styles.badgeStack}>
+        {item.isTopDeal && (
+          <View style={styles.topDealSticker}>
+            <Text style={styles.topDealText}>Top Deal</Text>
+          </View>
+        )}
+        {isBestSeller && (
+          <View style={styles.bestSellerSticker}>
+            <Text style={styles.bestSellerText}>Best Seller</Text>
+          </View>
+        )}
+      </View>
+
+      <RemoteImage
+        uri={item.thumbPath}
+        fallbackUri={item.fallbackThumbPath}
+        style={styles.productImage}
+      />
       <AnimatedPressable
         style={[
           styles.wishlistButton,
@@ -126,13 +168,27 @@ function ProductCard({
           color={isWishlisted ? WISHLIST_ACTIVE_COLOR : colors.accent}
         />
       </AnimatedPressable>
-      <View style={styles.productNameRow}>
-        <Text style={styles.productName}>{item.name}</Text>
+
+      <Text style={styles.productName}>{item.name}</Text>
+
+      {item.salePercent ? (
+        <>
+          <View style={styles.saleRow}>
+            <Text style={styles.saleText}>Sale -{item.salePercent}%</Text>
+            <Ionicons name="arrow-down" size={12} color="#FF2C2C" />
+          </View>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={12} color="#F5A623" />
+            <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+          </View>
+        </>
+      ) : (
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={12} color="#F5A623" />
           <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
         </View>
-      </View>
+      )}
+
       <View style={styles.productFooter}>
         <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
         <AnimatedPressable
@@ -329,7 +385,11 @@ function BestSellerRow({
 
   return (
     <View style={styles.bestSellerRow}>
-      <RemoteImage path={item.thumbPath} style={styles.bestSellerImage} />
+      <RemoteImage
+        uri={item.thumbPath}
+        fallbackUri={item.fallbackThumbPath}
+        style={styles.bestSellerImage}
+      />
       <View style={styles.bestSellerInfo}>
         <Text style={styles.bestSellerName}>{item.name}</Text>
         <View style={styles.bestSellerRatingRow}>
@@ -415,14 +475,17 @@ export default function Home() {
   const styles = getStyles(colors, bannerWidth);
   const params = useLocalSearchParams<{ location?: string }>();
 
+  // --- Defers building the full heavy screen until the tab transition
+  // has finished, so the skeleton is what paints instantly on first mount ---
+  const ready = useDeferredReady();
+
   // --- Screen state ---
   const [location, setLocation] = useState(params.location ?? DEFAULT_LOCATION);
   const [activeFilter, setActiveFilter] = useState("Newest");
   const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [timeLeft, setTimeLeft] = useState(FLASH_SALE_SECONDS);
-  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
-  const [activeProductPage, setActiveProductPage] = useState(0);
   const [hasUnread, setHasUnread] = useState(true);
+  const [gridTransitioning, setGridTransitioning] = useState(false);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
@@ -430,12 +493,10 @@ export default function Home() {
     useState<FilterState>(EMPTY_FILTERS);
 
   // --- Animated values ---
-  const dotAnims = useRef(
-    BANNER_SLIDES.map((_, i) => new Animated.Value(i === 0 ? 1 : 0)),
-  ).current;
-  const productPageAnims = useRef(
-    Array.from({ length: 8 }, (_, i) => new Animated.Value(i === 0 ? 1 : 0)),
-  ).current;
+  // Live scroll position for each paginated horizontal scroller, driving
+  // the accent-colored progress bar thumbs directly (native-driven).
+  const bannerScrollX = useRef(new Animated.Value(0)).current;
+  const productScrollX = useRef(new Animated.Value(0)).current;
   const bellScaleAnim = useRef(new Animated.Value(1)).current;
   const filterScaleAnim = useRef(new Animated.Value(1)).current;
   const resetScaleAnim = useRef(new Animated.Value(1)).current;
@@ -456,34 +517,15 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- Banner dot animation, tracks activeBannerIndex ---
+  // --- Reset the product pager's scroll position and show the grid
+  // skeleton for a beat whenever sort or filters change ---
   useEffect(() => {
-    dotAnims.forEach((anim, i) => {
-      Animated.timing(anim, {
-        toValue: i === activeBannerIndex ? 1 : 0,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: false,
-      }).start();
+    productScrollX.setValue(0);
+    const task = InteractionManager.runAfterInteractions(() => {
+      setGridTransitioning(false);
     });
-  }, [activeBannerIndex, dotAnims]);
-
-  // --- Reset to first product page whenever sort or filters change ---
-  useEffect(() => {
-    setActiveProductPage(0);
+    return () => task.cancel();
   }, [activeFilter, appliedFilters]);
-
-  // --- Product page dot animation, tracks activeProductPage ---
-  useEffect(() => {
-    productPageAnims.forEach((anim, i) => {
-      Animated.timing(anim, {
-        toValue: i === activeProductPage ? 1 : 0,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: false,
-      }).start();
-    });
-  }, [activeProductPage, productPageAnims]);
 
   const hours = Math.floor(timeLeft / 3600);
   const minutes = Math.floor((timeLeft % 3600) / 60);
@@ -575,24 +617,6 @@ export default function Home() {
     );
   }
 
-  // --- Scroll handlers, fire on every scroll frame (not just on release) so
-  // the pagination dots track the finger live ---
-  function handleBannerScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const index = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
-    if (index !== activeBannerIndex) {
-      setActiveBannerIndex(index);
-    }
-  }
-
-  function handleProductPageScroll(
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) {
-    const index = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
-    if (index !== activeProductPage) {
-      setActiveProductPage(index);
-    }
-  }
-
   function handleBellPress() {
     Animated.sequence([
       Animated.timing(bellScaleAnim, {
@@ -677,6 +701,11 @@ export default function Home() {
     }
   }
 
+  function handleSortPress(filter: string) {
+    setGridTransitioning(true);
+    setActiveFilter(filter);
+  }
+
   function openFilterModal() {
     setDraftFilters(appliedFilters);
     setFilterModalVisible(true);
@@ -695,12 +724,21 @@ export default function Home() {
   }
 
   function applyFilters() {
+    setGridTransitioning(true);
     setAppliedFilters(draftFilters);
     setFilterModalVisible(false);
   }
 
   function resetFilters() {
     setDraftFilters(EMPTY_FILTERS);
+  }
+
+  if (!ready) {
+    return (
+      <View style={styles.screen}>
+        <HomeSkeleton />
+      </View>
+    );
   }
 
   return (
@@ -772,18 +810,25 @@ export default function Home() {
         </View>
 
         {/* --- Promo banner carousel --- */}
-        <ScrollView
+        <Animated.ScrollView
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onScroll={handleBannerScroll}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: bannerScrollX } } }],
+            { useNativeDriver: true },
+          )}
           scrollEventThrottle={16}
           style={styles.bannerScroll}
         >
           {BANNER_SLIDES.map((slide) => (
             <View key={slide.id} style={{ width: bannerWidth }}>
               <View style={styles.banner}>
-                <RemoteImage path={slide.path} style={styles.bannerImage} />
+                <RemoteImage
+                  uri={slide.uri}
+                  fallbackUri={slide.fallbackUri}
+                  style={styles.bannerImage}
+                />
                 <View style={styles.bannerOverlay} />
                 <View style={styles.bannerText}>
                   <Text style={styles.bannerTitle}>New Collection</Text>
@@ -800,28 +845,14 @@ export default function Home() {
               </View>
             </View>
           ))}
-        </ScrollView>
+        </Animated.ScrollView>
 
-        <View style={styles.dotsRow}>
-          {BANNER_SLIDES.map((slide, i) => (
-            <Animated.View
-              key={slide.id}
-              style={[
-                styles.dot,
-                {
-                  width: dotAnims[i].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [6, 18],
-                  }),
-                  backgroundColor: dotAnims[i].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [colors.outline, colors.accent],
-                  }),
-                },
-              ]}
-            />
-          ))}
-        </View>
+        <ScrollProgressBar
+          scrollX={bannerScrollX}
+          viewportWidth={bannerWidth}
+          pageCount={BANNER_SLIDES.length}
+          colors={colors}
+        />
 
         {/* --- Category shortcuts --- */}
         <View style={styles.sectionHeaderRow}>
@@ -880,7 +911,7 @@ export default function Home() {
                 styles.filterChip,
                 activeFilter === filter && styles.filterChipActive,
               ]}
-              onPress={() => setActiveFilter(filter)}
+              onPress={() => handleSortPress(filter)}
             >
               <Text
                 style={[
@@ -895,7 +926,9 @@ export default function Home() {
         </View>
 
         {/* --- Paginated product grid (2 per page) --- */}
-        {displayedProducts.length === 0 ? (
+        {gridTransitioning ? (
+          <ProductGridSkeleton rows={1} />
+        ) : displayedProducts.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons
               name="filter-outline"
@@ -906,11 +939,14 @@ export default function Home() {
           </View>
         ) : (
           <>
-            <ScrollView
+            <Animated.ScrollView
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onScroll={handleProductPageScroll}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { x: productScrollX } } }],
+                { useNativeDriver: true },
+              )}
               scrollEventThrottle={16}
             >
               {productPages.map((page, pageIndex) => (
@@ -931,30 +967,14 @@ export default function Home() {
                   ))}
                 </View>
               ))}
-            </ScrollView>
+            </Animated.ScrollView>
 
-            {productPages.length > 1 && (
-              <View style={styles.dotsRow}>
-                {productPages.map((_, i) => (
-                  <Animated.View
-                    key={i}
-                    style={[
-                      styles.dot,
-                      {
-                        width: productPageAnims[i].interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [6, 18],
-                        }),
-                        backgroundColor: productPageAnims[i].interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [colors.outline, colors.accent],
-                        }),
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
+            <ScrollProgressBar
+              scrollX={productScrollX}
+              viewportWidth={bannerWidth}
+              pageCount={productPages.length}
+              colors={colors}
+            />
           </>
         )}
 
@@ -1268,18 +1288,6 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       color: colors.onAccent,
     },
 
-    // --- Shared pagination dots (banner + product pages) ---
-    dotsRow: {
-      flexDirection: "row",
-      justifyContent: "center",
-      gap: 6,
-      marginBottom: 24,
-    },
-    dot: {
-      height: 6,
-      borderRadius: 3,
-    },
-
     // --- Section header (Category / Best Sellers) ---
     sectionHeaderRow: {
       flexDirection: "row",
@@ -1392,6 +1400,38 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       padding: 12,
       marginBottom: 12,
     },
+
+    // --- Badge stack (Top Deal / Best Seller), stacked top-left ---
+    badgeStack: {
+      position: "absolute",
+      top: 20,
+      left: 20,
+      zIndex: 1,
+      gap: 4,
+    },
+    topDealSticker: {
+      backgroundColor: "#FF2C2C",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    topDealText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+    bestSellerSticker: {
+      backgroundColor: "#FF9900",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    bestSellerText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+
     productImage: {
       width: "100%",
       height: 140,
@@ -1409,28 +1449,37 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       alignItems: "center",
       justifyContent: "center",
     },
-    productNameRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 6,
-    },
+
+    // --- Title / sale / rating stack ---
     productName: {
-      flex: 1,
       fontFamily: Fonts.semiBold,
       fontSize: 13,
       color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    saleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      marginBottom: 4,
+    },
+    saleText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 11,
+      color: "#FF2C2C",
     },
     ratingRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 3,
+      marginBottom: 6,
     },
     ratingText: {
       fontFamily: Fonts.medium,
       fontSize: 12,
       color: colors.textMuted,
     },
+
     productFooter: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -1463,7 +1512,7 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       paddingHorizontal: 40,
     },
 
-    // --- Best sellers ---
+    // --- Best sellers row (untouched horizontal layout) ---
     bestSellerRow: {
       flexDirection: "row",
       alignItems: "center",

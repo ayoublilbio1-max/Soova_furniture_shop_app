@@ -1,11 +1,10 @@
 // Reusable remote image component.
-// Fixes a cold-start Android issue where the very first network image
-// request can silently fail before the native networking layer is fully
-// warmed up — without this, a failed first load just stays blank forever.
-// Retries the same URL a few times, then falls back from Supabase to
-// Cloudflare if it still won't load.
+// Takes explicit primary + fallback URLs (matching the product data's own
+// Supabase/Cloudflare URL pairs) instead of deriving them from a relative
+// path. Retries the primary URL a few times to smooth over an Android
+// cold-start network issue, then switches to the fallback URL if it still
+// won't load.
 
-import { getCloudflareImageUrl, getSupabaseImageUrl } from "@/constants/storage";
 import { Image, ImageStyle } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { StyleProp } from "react-native";
@@ -14,15 +13,18 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
 
 type RemoteImageProps = {
-  path: string; // relative path under the product-images bucket, e.g. "chairs/chair_01/chair_01_a_thumb.webp"
+  uri: string;
+  fallbackUri?: string;
   style?: StyleProp<ImageStyle>;
   contentFit?: "cover" | "contain";
 };
 
-export function RemoteImage({ path, style, contentFit = "cover" }: RemoteImageProps) {
-  // Bumping "attempt" changes the Image's key below, forcing a real remount
-  // (and therefore a fresh network request) rather than relying on internal
-  // caching that may just replay the same failed attempt.
+export function RemoteImage({
+  uri,
+  fallbackUri,
+  style,
+  contentFit = "cover",
+}: RemoteImageProps) {
   const [attempt, setAttempt] = useState(0);
   const [useFallback, setUseFallback] = useState(false);
   const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,17 +35,14 @@ export function RemoteImage({ path, style, contentFit = "cover" }: RemoteImagePr
     };
   }, []);
 
-  const uri = useFallback ? getCloudflareImageUrl(path) : getSupabaseImageUrl(path);
+  const activeUri = useFallback && fallbackUri ? fallbackUri : uri;
 
   function handleError() {
     if (attempt < MAX_RETRIES) {
-      // Still have retries left on the current source — try again shortly.
       retryTimeout.current = setTimeout(() => {
         setAttempt((prev) => prev + 1);
       }, RETRY_DELAY_MS);
-    } else if (!useFallback) {
-      // Exhausted retries on Supabase — switch to the Cloudflare fallback
-      // and give it its own set of retries.
+    } else if (!useFallback && fallbackUri) {
       setUseFallback(true);
       setAttempt(0);
     }
@@ -51,8 +50,8 @@ export function RemoteImage({ path, style, contentFit = "cover" }: RemoteImagePr
 
   return (
     <Image
-      key={`${uri}-${attempt}`}
-      source={{ uri }}
+      key={`${activeUri}-${attempt}`}
+      source={{ uri: activeUri }}
       style={style}
       contentFit={contentFit}
       transition={150}

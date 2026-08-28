@@ -1,5 +1,10 @@
+// Notifications screen — list grouped by Today/Yesterday/date, backed by a
+// shared Zustand store. Long-press enters multi-select mode.
+
+import { NotificationsSkeleton } from "@/components/ui/notifications-skeleton";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
+import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import {
   NotificationItem,
@@ -178,6 +183,10 @@ export default function Notifications() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
 
+  // --- Defers building the list until the push transition has finished,
+  // so the skeleton is what paints instantly on tap ---
+  const ready = useDeferredReady();
+
   const notifications = useNotificationsStore((state) => state.notifications);
   const markAsRead = useNotificationsStore((state) => state.markAsRead);
   const bulkMarkAsRead = useNotificationsStore((state) => state.bulkMarkAsRead);
@@ -255,6 +264,14 @@ export default function Notifications() {
   function handleBulkDelete() {
     bulkDelete(Array.from(selectedIds));
     exitSelectionMode();
+  }
+
+  if (!ready) {
+    return (
+      <View style={styles.container}>
+        <NotificationsSkeleton />
+      </View>
+    );
   }
 
   return (

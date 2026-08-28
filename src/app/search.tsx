@@ -1,28 +1,33 @@
+// Search screen — reached from Home/Shop's search bar. Live results while
+// typing, persisted recent searches, and recently viewed products.
+
+import { RemoteImage } from "@/components/ui/remote-image";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { categories } from "@/data/categories";
+import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import {
-    RecentViewProduct,
-    useSearchHistoryStore,
+  RecentViewProduct,
+  useSearchHistoryStore,
 } from "@/store/search-history-store";
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Easing,
-    FlatList,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Animated,
+  Easing,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
+const WISHLIST_ACTIVE_COLOR = "#DC143C";
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function getCategoryLabel(categoryId: string) {
@@ -30,6 +35,7 @@ function getCategoryLabel(categoryId: string) {
   return match ? match.name : categoryId;
 }
 
+// --- Grid card for live search results: badges, title, sale/rating, price ---
 type ResultCardProps = {
   item: Product;
   colors: ThemeColors;
@@ -48,6 +54,7 @@ function ResultCard({
   onPress,
 }: ResultCardProps) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
+  const isBestSeller = bestSellerIds.has(item.id);
 
   function handleWishlistPress() {
     onToggleWishlist(item.id);
@@ -69,12 +76,23 @@ function ResultCard({
 
   return (
     <Pressable style={styles.resultCard} onPress={onPress}>
-      <Image
-        source={{
-          uri: `https://limjfxtziyciiyxjuyyh.supabase.co/storage/v1/object/public/product-images/product-images/${item.thumbPath}`,
-        }}
+      <View style={styles.badgeStack}>
+        {item.isTopDeal && (
+          <View style={styles.topDealSticker}>
+            <Text style={styles.topDealText}>Top Deal</Text>
+          </View>
+        )}
+        {isBestSeller && (
+          <View style={styles.bestSellerSticker}>
+            <Text style={styles.bestSellerText}>Best Seller</Text>
+          </View>
+        )}
+      </View>
+
+      <RemoteImage
+        uri={item.thumbPath}
+        fallbackUri={item.fallbackThumbPath}
         style={styles.resultImage}
-        contentFit="cover"
       />
       <AnimatedPressable
         style={[
@@ -89,13 +107,27 @@ function ResultCard({
           color={isWishlisted ? "#DC143C" : colors.accent}
         />
       </AnimatedPressable>
-      <View style={styles.resultNameRow}>
-        <Text style={styles.resultName}>{item.name}</Text>
+
+      <Text style={styles.resultName}>{item.name}</Text>
+
+      {item.salePercent ? (
+        <>
+          <View style={styles.saleRow}>
+            <Text style={styles.saleText}>Sale -{item.salePercent}%</Text>
+            <Ionicons name="arrow-down" size={12} color="#FF2C2C" />
+          </View>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={12} color="#F5A623" />
+            <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+          </View>
+        </>
+      ) : (
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={12} color="#F5A623" />
           <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
         </View>
-      </View>
+      )}
+
       <Text style={styles.resultPrice}>${item.price.toFixed(2)}</Text>
     </Pressable>
   );
@@ -154,6 +186,7 @@ export default function Search() {
       category: item.category,
       price: item.price,
       thumbPath: item.thumbPath,
+      fallbackThumbPath: item.fallbackThumbPath,
     });
     Alert.alert(item.name, "Product details coming soon.");
   }
@@ -273,12 +306,10 @@ export default function Search() {
                       style={styles.recentViewRow}
                       onPress={() => handleProductPress(item)}
                     >
-                      <Image
-                        source={{
-                          uri: `https://limjfxtziyciiyxjuyyh.supabase.co/storage/v1/object/public/product-images/product-images/${item.thumbPath}`,
-                        }}
+                      <RemoteImage
+                        uri={item.thumbPath}
+                        fallbackUri={item.fallbackThumbPath}
                         style={styles.recentViewImage}
-                        contentFit="cover"
                       />
                       <View style={styles.recentViewInfo}>
                         <Text style={styles.recentViewName}>{item.name}</Text>
@@ -454,6 +485,38 @@ function getStyles(colors: ThemeColors) {
       borderRadius: 20,
       padding: 12,
     },
+
+    // --- Badge stack (Top Deal / Best Seller), stacked top-left ---
+    badgeStack: {
+      position: "absolute",
+      top: 20,
+      left: 20,
+      zIndex: 1,
+      gap: 4,
+    },
+    topDealSticker: {
+      backgroundColor: "#FF2C2C",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    topDealText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+    bestSellerSticker: {
+      backgroundColor: "#FF9900",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    bestSellerText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: "#FFFFFF",
+    },
+
     resultImage: {
       width: "100%",
       height: 140,
@@ -471,28 +534,37 @@ function getStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
     },
-    resultNameRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 4,
-    },
+
+    // --- Title / sale / rating stack ---
     resultName: {
       fontFamily: Fonts.semiBold,
       fontSize: 14,
       color: colors.textPrimary,
-      flex: 1,
+      marginBottom: 4,
+    },
+    saleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      marginBottom: 4,
+    },
+    saleText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 11,
+      color: "#FF2C2C",
     },
     ratingRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 3,
+      marginBottom: 6,
     },
     ratingText: {
       fontFamily: Fonts.medium,
       fontSize: 12,
       color: colors.textMuted,
     },
+
     resultPrice: {
       fontFamily: Fonts.bold,
       fontSize: 15,
