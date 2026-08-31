@@ -12,6 +12,7 @@ import { matchesCategoryFilter } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -94,12 +95,14 @@ function BestSellerCard({
   styles,
   isWishlisted,
   onToggleWishlist,
+  onPress,
 }: {
   item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
+  onPress: () => void;
 }) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
@@ -135,7 +138,7 @@ function BestSellerCard({
   }
 
   return (
-    <View style={styles.productCard}>
+    <Pressable style={styles.productCard} onPress={onPress}>
       <View style={styles.badgeStack}>
         {item.isTopDeal && (
           <View style={styles.topDealSticker}>
@@ -196,7 +199,7 @@ function BestSellerCard({
           <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
         </AnimatedPressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -208,7 +211,11 @@ export default function BestSellers() {
   // finished, so the skeleton is what paints instantly on tap ---
   const ready = useDeferredReady();
 
-  const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
+  // --- Global wishlist state, shared with every other screen and the
+  // Wishlist tab itself ---
+  const wishlistedIds = useWishlistStore((s) => s.wishlistedIds);
+  const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [categoryTransitioning, setCategoryTransitioning] = useState(false);
 
@@ -248,16 +255,8 @@ export default function BestSellers() {
     setActiveCategory(id);
   }
 
-  function toggleWishlist(id: string) {
-    setWishlisted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  function openProductDetails(id: string) {
+    router.push({ pathname: "/product-details", params: { id } });
   }
 
   if (!ready) {
@@ -339,8 +338,9 @@ export default function BestSellers() {
               item={item}
               colors={colors}
               styles={styles}
-              isWishlisted={wishlisted.has(item.id)}
+              isWishlisted={!!wishlistedIds[item.id]}
               onToggleWishlist={toggleWishlist}
+              onPress={() => openProductDetails(item.id)}
             />
           )}
         />

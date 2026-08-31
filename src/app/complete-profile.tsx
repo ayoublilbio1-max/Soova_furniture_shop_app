@@ -7,9 +7,11 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -64,6 +66,13 @@ export default function CompleteProfile() {
   const [countrySearch, setCountrySearch] = useState("");
   const [genderModalVisible, setGenderModalVisible] = useState(false);
 
+  // --- Busy state shared by both navigation buttons, so a tap is
+  // acknowledged immediately and neither button can be double-fired
+  // (or both fired at once) while the transition is in flight. ---
+  const [pendingAction, setPendingAction] = useState<
+    "complete" | "skip" | null
+  >(null);
+
   const filteredCountries = useMemo(() => {
     if (!countrySearch.trim()) return ALL_COUNTRIES;
     const query = countrySearch.trim().toLowerCase();
@@ -111,12 +120,25 @@ export default function CompleteProfile() {
     }
   }
 
-  function handleCompleteProfile() {
+  function navigateToLocation(action: "complete" | "skip") {
+    if (pendingAction) return;
+    setPendingAction(action);
+
     router.push("/location-access");
+
+    // Clear once the navigation transition has settled, so the buttons
+    // work again if the user comes back to this screen.
+    InteractionManager.runAfterInteractions(() => {
+      setPendingAction(null);
+    });
+  }
+
+  function handleCompleteProfile() {
+    navigateToLocation("complete");
   }
 
   function handleSkip() {
-    router.push("/location-access");
+    navigateToLocation("skip");
   }
 
   function selectCountry(country: Country) {
@@ -226,12 +248,35 @@ export default function CompleteProfile() {
         <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
       </Pressable>
 
-      <Pressable style={styles.cta} onPress={handleCompleteProfile}>
-        <Text style={styles.ctaText}>Complete Profile</Text>
+      <Pressable
+        style={[styles.cta, pendingAction && styles.ctaBusy]}
+        onPress={handleCompleteProfile}
+        disabled={!!pendingAction}
+      >
+        {pendingAction === "complete" ? (
+          <ActivityIndicator color={colors.onAccent} size="small" />
+        ) : (
+          <Text style={styles.ctaText}>Complete Profile</Text>
+        )}
       </Pressable>
 
-      <Pressable style={styles.skipButton} onPress={handleSkip}>
-        <Text style={styles.skipButtonText}>Skip</Text>
+      <Pressable
+        style={styles.skipButton}
+        onPress={handleSkip}
+        disabled={!!pendingAction}
+      >
+        {pendingAction === "skip" ? (
+          <ActivityIndicator color={colors.textMuted} size="small" />
+        ) : (
+          <Text
+            style={[
+              styles.skipButtonText,
+              pendingAction && styles.skipButtonTextBusy,
+            ]}
+          >
+            Skip
+          </Text>
+        )}
       </Pressable>
 
       <Modal
@@ -386,6 +431,7 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
       fontFamily: Fonts.bold,
       fontSize: 28,
       color: colors.textPrimary,
+      textAlign: "center",
     },
     subheading: {
       fontFamily: Fonts.regular,
@@ -394,6 +440,7 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
       color: colors.textMuted,
       marginTop: 10,
       marginBottom: 24,
+      textAlign: "center",
     },
     avatarWrapper: {
       alignSelf: "center",
@@ -485,7 +532,11 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
       borderRadius: 32,
       paddingVertical: 18,
       alignItems: "center",
+      justifyContent: "center",
       marginTop: 8,
+    },
+    ctaBusy: {
+      opacity: 0.7,
     },
     ctaText: {
       fontFamily: Fonts.semiBold,
@@ -494,6 +545,7 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
     },
     skipButton: {
       alignItems: "center",
+      justifyContent: "center",
       paddingVertical: 16,
     },
     skipButtonText: {
@@ -501,6 +553,9 @@ function getStyles(colors: ThemeColors, bottomInset: number, topInset: number) {
       fontSize: 15,
       color: colors.textMuted,
       textDecorationLine: "underline",
+    },
+    skipButtonTextBusy: {
+      opacity: 0.5,
     },
     modalBackdrop: {
       flex: 1,

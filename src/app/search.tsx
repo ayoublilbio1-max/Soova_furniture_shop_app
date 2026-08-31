@@ -12,11 +12,11 @@ import {
   RecentViewProduct,
   useSearchHistoryStore,
 } from "@/store/search-history-store";
+import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Easing,
   FlatList,
@@ -143,8 +143,12 @@ export default function Search() {
   const removeSearch = useSearchHistoryStore((s) => s.removeSearch);
   const addView = useSearchHistoryStore((s) => s.addView);
 
+  // --- Global wishlist state, shared with every other screen and the
+  // Wishlist tab itself ---
+  const wishlistedIds = useWishlistStore((s) => s.wishlistedIds);
+  const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
+
   const [query, setQuery] = useState("");
-  const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
 
   const results = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
@@ -157,18 +161,6 @@ export default function Search() {
   }, [query]);
 
   const showingResults = query.trim().length > 0;
-
-  function toggleWishlist(id: string) {
-    setWishlisted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
 
   function handleSubmit() {
     addSearch(query);
@@ -188,7 +180,7 @@ export default function Search() {
       thumbPath: item.thumbPath,
       fallbackThumbPath: item.fallbackThumbPath,
     });
-    Alert.alert(item.name, "Product details coming soon.");
+    router.push({ pathname: "/product-details", params: { id: item.id } });
   }
 
   return (
@@ -250,7 +242,7 @@ export default function Search() {
                   item={item}
                   colors={colors}
                   styles={styles}
-                  isWishlisted={wishlisted.has(item.id)}
+                  isWishlisted={!!wishlistedIds[item.id]}
                   onToggleWishlist={toggleWishlist}
                   onPress={() => handleProductPress(item)}
                 />

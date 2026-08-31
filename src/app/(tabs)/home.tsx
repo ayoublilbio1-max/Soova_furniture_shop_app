@@ -12,6 +12,7 @@ import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -94,6 +95,7 @@ type ProductCardProps = {
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
   onAddToCart: () => void;
+  onPress: () => void;
 };
 
 function ProductCard({
@@ -103,6 +105,7 @@ function ProductCard({
   isWishlisted,
   onToggleWishlist,
   onAddToCart,
+  onPress,
 }: ProductCardProps) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
@@ -136,7 +139,7 @@ function ProductCard({
   }
 
   return (
-    <View style={styles.productCard}>
+    <Pressable style={styles.productCard} onPress={onPress}>
       <View style={styles.badgeStack}>
         {item.isTopDeal && (
           <View style={styles.topDealSticker}>
@@ -198,7 +201,7 @@ function ProductCard({
           <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
         </AnimatedPressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -357,11 +360,13 @@ function BestSellerRow({
   colors,
   styles,
   onAddToCart,
+  onPress,
 }: {
   item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
   onAddToCart: () => void;
+  onPress: () => void;
 }) {
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -384,7 +389,7 @@ function BestSellerRow({
   }
 
   return (
-    <View style={styles.bestSellerRow}>
+    <Pressable style={styles.bestSellerRow} onPress={onPress}>
       <RemoteImage
         uri={item.thumbPath}
         fallbackUri={item.fallbackThumbPath}
@@ -409,7 +414,7 @@ function BestSellerRow({
       >
         <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
       </AnimatedPressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -479,10 +484,14 @@ export default function Home() {
   // has finished, so the skeleton is what paints instantly on first mount ---
   const ready = useDeferredReady();
 
+  // --- Global wishlist state, shared with every other screen and the
+  // Wishlist tab itself ---
+  const wishlistedIds = useWishlistStore((s) => s.wishlistedIds);
+  const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
+
   // --- Screen state ---
   const [location, setLocation] = useState(params.location ?? DEFAULT_LOCATION);
   const [activeFilter, setActiveFilter] = useState("Newest");
-  const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [timeLeft, setTimeLeft] = useState(FLASH_SALE_SECONDS);
   const [hasUnread, setHasUnread] = useState(true);
   const [gridTransitioning, setGridTransitioning] = useState(false);
@@ -598,23 +607,15 @@ export default function Home() {
     appliedFilters.categoryIds.size > 0 ||
     appliedFilters.minRating > 0;
 
-  function toggleWishlist(id: string) {
-    setWishlisted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
   function notImplemented(label: string) {
     Alert.alert(
       label,
       "This will continue once the corresponding screen is built.",
     );
+  }
+
+  function openProductDetails(id: string) {
+    router.push({ pathname: "/product-details", params: { id } });
   }
 
   function handleBellPress() {
@@ -960,9 +961,10 @@ export default function Home() {
                       item={item}
                       colors={colors}
                       styles={styles}
-                      isWishlisted={wishlisted.has(item.id)}
+                      isWishlisted={!!wishlistedIds[item.id]}
                       onToggleWishlist={toggleWishlist}
                       onAddToCart={() => notImplemented("Add to Cart")}
+                      onPress={() => openProductDetails(item.id)}
                     />
                   ))}
                 </View>
@@ -995,6 +997,7 @@ export default function Home() {
             colors={colors}
             styles={styles}
             onAddToCart={() => notImplemented("Add to Cart")}
+            onPress={() => openProductDetails(item.id)}
           />
         ))}
 

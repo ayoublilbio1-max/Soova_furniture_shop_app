@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -32,6 +34,10 @@ export default function SignIn() {
     params.passwordReset === "success",
   );
 
+  // --- Busy state for the primary CTA, so the tap is acknowledged
+  // immediately and a second tap can't fire the same action twice. ---
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
     if (!showBanner) return;
 
@@ -53,6 +59,9 @@ export default function SignIn() {
   }
 
   function handleSignIn() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
       router.push({
         pathname: "/complete-profile",
@@ -61,6 +70,12 @@ export default function SignIn() {
     } else {
       openDemoModal();
     }
+
+    // Clear once the navigation transition (or modal open) has settled, so
+    // the button works again when the user returns to this screen.
+    InteractionManager.runAfterInteractions(() => {
+      setIsSubmitting(false);
+    });
   }
 
   return (
@@ -131,8 +146,16 @@ export default function SignIn() {
         <Text style={styles.forgotPassword}>Forgot Password?</Text>
       </Pressable>
 
-      <Pressable style={styles.cta} onPress={handleSignIn}>
-        <Text style={styles.ctaText}>Sign In</Text>
+      <Pressable
+        style={[styles.cta, isSubmitting && styles.ctaBusy]}
+        onPress={handleSignIn}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color={colors.onAccent} size="small" />
+        ) : (
+          <Text style={styles.ctaText}>Sign In</Text>
+        )}
       </Pressable>
 
       <View style={styles.dividerRow}>
@@ -302,7 +325,11 @@ function getStyles(colors: ThemeColors, topInset: number) {
       borderRadius: 32,
       paddingVertical: 18,
       alignItems: "center",
+      justifyContent: "center",
       marginBottom: 24,
+    },
+    ctaBusy: {
+      opacity: 0.7,
     },
     ctaText: {
       fontFamily: Fonts.semiBold,

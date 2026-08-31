@@ -72,7 +72,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Soova to access your location to show nearby stores and delivery options."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -10,6 +10,7 @@ import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -22,6 +23,7 @@ import {
   Easing,
   FlatList,
   InteractionManager,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -247,6 +249,7 @@ type ShopProductCardProps = {
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
   onAddToCart: () => void;
+  onPress: () => void;
 };
 
 function ShopProductCard({
@@ -256,6 +259,7 @@ function ShopProductCard({
   isWishlisted,
   onToggleWishlist,
   onAddToCart,
+  onPress,
 }: ShopProductCardProps) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
@@ -289,7 +293,7 @@ function ShopProductCard({
   }
 
   return (
-    <View style={styles.productCard}>
+    <Pressable style={styles.productCard} onPress={onPress}>
       <View style={styles.badgeStack}>
         {item.isTopDeal && (
           <View style={styles.topDealSticker}>
@@ -351,7 +355,7 @@ function ShopProductCard({
           <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
         </AnimatedPressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -363,12 +367,26 @@ export default function Shop() {
   // has finished, so the skeleton (cheap) is what paints instantly on tap ---
   const ready = useDeferredReady();
 
+  // --- Global wishlist state, shared with every other screen and the
+  // Wishlist tab itself ---
+  const wishlistedIds = useWishlistStore((s) => s.wishlistedIds);
+  const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
+
   // --- Screen state ---
   const [activeTab, setActiveTab] = useState<TabId>("explore");
   const [tabTransitioning, setTabTransitioning] = useState(false);
-  const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // --- Busy state for the photo search button. Requesting permission and
+  // opening the system image picker takes a real moment, so the button
+  // acknowledges the tap immediately and can't be fired twice. ---
+  const [isPhotoSearching, setIsPhotoSearching] = useState(false);
+
+  // --- Shown after a photo is picked, explaining that visual search isn't
+  // wired to a live service in this portfolio build. ---
+  const [visualSearchModalVisible, setVisualSearchModalVisible] =
+    useState(false);
 
   // --- Explore / New Sale / Vintage / Modern filtering ---
   const filteredProducts = useMemo(() => {
@@ -407,23 +425,15 @@ export default function Shop() {
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   const hasMore = visibleCount < filteredProducts.length;
 
-  function toggleWishlist(id: string) {
-    setWishlisted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
   function notImplemented(label: string) {
     Alert.alert(
       label,
       "This will continue once the corresponding screen is built.",
     );
+  }
+
+  function openProductDetails(id: string) {
+    router.push({ pathname: "/product-details", params: { id } });
   }
 
   // --- Infinite scroll: simulates a fetch delay, then reveals the next 10 ---
@@ -440,25 +450,32 @@ export default function Shop() {
 
   // --- "Search with photo" button next to the search bar ---
   async function handlePhotoSearch() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permission needed",
-        "Allow photo access to search with an image.",
-      );
-      return;
-    }
+    if (isPhotoSearching) return;
+    setIsPhotoSearching(true);
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permission needed",
+          "Allow photo access to search with an image.",
+        );
+        return;
+      }
 
-    if (!result.canceled) {
-      Alert.alert(
-        "Search by Photo",
-        "This will continue once the corresponding screen is built.",
-      );
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setVisualSearchModalVisible(true);
+      }
+    } finally {
+      // finally: clears the busy state on every exit path — permission
+      // denied, picker cancelled, image chosen, or an unexpected error.
+      setIsPhotoSearching(false);
     }
   }
 
@@ -494,14 +511,22 @@ export default function Shop() {
                 </Text>
               </Pressable>
               <Pressable
-                style={styles.photoSearchButton}
+                style={[
+                  styles.photoSearchButton,
+                  isPhotoSearching && styles.photoSearchButtonBusy,
+                ]}
                 onPress={handlePhotoSearch}
+                disabled={isPhotoSearching}
               >
-                <Ionicons
-                  name="camera-outline"
-                  size={20}
-                  color={colors.onAccent}
-                />
+                {isPhotoSearching ? (
+                  <ActivityIndicator color={colors.onAccent} size="small" />
+                ) : (
+                  <Ionicons
+                    name="camera-outline"
+                    size={20}
+                    color={colors.onAccent}
+                  />
+                )}
               </Pressable>
             </View>
 
@@ -599,12 +624,47 @@ export default function Shop() {
             item={item}
             colors={colors}
             styles={styles}
-            isWishlisted={wishlisted.has(item.id)}
+            isWishlisted={!!wishlistedIds[item.id]}
             onToggleWishlist={toggleWishlist}
             onAddToCart={() => notImplemented("Add to Cart")}
+            onPress={() => openProductDetails(item.id)}
           />
         )}
       />
+
+      {/* --- Visual search demo notice --- */}
+      <Modal
+        transparent
+        visible={visualSearchModalVisible}
+        animationType="fade"
+        onRequestClose={() => setVisualSearchModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconCircle}>
+              <Ionicons name="sparkles" size={26} color={colors.accent} />
+            </View>
+
+            <Text style={styles.modalTitle}>Visual Search</Text>
+            <Text style={styles.modalBody}>
+              Visual search matches your photo against the catalogue using an
+              image recognition service.
+            </Text>
+            <Text style={styles.modalBody}>
+              Soova is a portfolio demonstration, so this feature isn&apos;t
+              connected to a live service here. Reach out to the developer to
+              see it running or to build it into your own project.
+            </Text>
+
+            <Pressable
+              style={styles.modalPrimaryButton}
+              onPress={() => setVisualSearchModalVisible(false)}
+            >
+              <Text style={styles.modalPrimaryButtonText}>Got It</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -651,6 +711,9 @@ function getStyles(colors: ThemeColors) {
       backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
+    },
+    photoSearchButtonBusy: {
+      opacity: 0.7,
     },
 
     // --- Explore/New Sale/Vintage/Modern tabs ---
@@ -947,6 +1010,55 @@ function getStyles(colors: ThemeColors) {
       color: colors.textMuted,
       textAlign: "center",
       paddingHorizontal: 40,
+    },
+
+    // --- Visual search demo modal ---
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+    },
+    modalCard: {
+      width: "100%",
+      backgroundColor: colors.background,
+      borderRadius: 24,
+      padding: 24,
+    },
+    modalIconCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.cardBackground,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 20,
+      color: colors.textPrimary,
+      marginBottom: 12,
+    },
+    modalBody: {
+      fontFamily: Fonts.regular,
+      fontSize: 14,
+      lineHeight: 21,
+      color: colors.textMuted,
+      marginBottom: 12,
+    },
+    modalPrimaryButton: {
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 16,
+      alignItems: "center",
+      marginTop: 12,
+    },
+    modalPrimaryButtonText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.onAccent,
     },
   });
 }

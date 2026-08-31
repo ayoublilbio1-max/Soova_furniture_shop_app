@@ -1,3 +1,7 @@
+// Sign-up screen — demo auth. Only the exact demo credentials succeed;
+// anything else (including all social buttons) opens the demo-explanation
+// modal with a one-tap "Use Demo Account" shortcut.
+
 import { GoogleIcon } from "@/components/ui/google-icon";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
@@ -6,6 +10,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
+  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -29,6 +35,10 @@ export default function SignUp() {
   const [agreed, setAgreed] = useState(true);
   const [demoModalVisible, setDemoModalVisible] = useState(false);
 
+  // --- Busy state for the primary CTA, so the tap is acknowledged
+  // immediately and a second tap can't fire the same action twice. ---
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   function openDemoModal() {
     setDemoModalVisible(true);
   }
@@ -41,6 +51,9 @@ export default function SignUp() {
   }
 
   function handleSignUp() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     if (email === DEMO_EMAIL && password === DEMO_PASSWORD && agreed) {
       router.push({
         pathname: "/complete-profile",
@@ -49,6 +62,12 @@ export default function SignUp() {
     } else {
       openDemoModal();
     }
+
+    // Clear once the navigation transition (or modal open) has settled, so
+    // the button works again when the user returns to this screen.
+    InteractionManager.runAfterInteractions(() => {
+      setIsSubmitting(false);
+    });
   }
 
   return (
@@ -146,8 +165,16 @@ export default function SignUp() {
         </Text>
       </View>
 
-      <Pressable style={styles.cta} onPress={handleSignUp}>
-        <Text style={styles.ctaText}>Sign Up</Text>
+      <Pressable
+        style={[styles.cta, isSubmitting && styles.ctaBusy]}
+        onPress={handleSignUp}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color={colors.onAccent} size="small" />
+        ) : (
+          <Text style={styles.ctaText}>Sign Up</Text>
+        )}
       </Pressable>
 
       <View style={styles.dividerRow}>
@@ -313,7 +340,11 @@ function getStyles(colors: ThemeColors) {
       borderRadius: 32,
       paddingVertical: 18,
       alignItems: "center",
+      justifyContent: "center",
       marginBottom: 24,
+    },
+    ctaBusy: {
+      opacity: 0.7,
     },
     ctaText: {
       fontFamily: Fonts.semiBold,

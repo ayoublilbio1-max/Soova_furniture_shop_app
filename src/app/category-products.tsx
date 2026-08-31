@@ -10,9 +10,10 @@ import { bestSellerIds, matchesCategoryFilter } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import {
   Alert,
   Animated,
@@ -34,12 +35,14 @@ function CategoryProductCard({
   styles,
   isWishlisted,
   onToggleWishlist,
+  onPress,
 }: {
   item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
+  onPress: () => void;
 }) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
@@ -76,7 +79,7 @@ function CategoryProductCard({
   }
 
   return (
-    <View style={styles.productCard}>
+    <Pressable style={styles.productCard} onPress={onPress}>
       <View style={styles.badgeStack}>
         {item.isTopDeal && (
           <View style={styles.topDealSticker}>
@@ -138,7 +141,7 @@ function CategoryProductCard({
           <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
         </AnimatedPressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -146,26 +149,22 @@ export default function CategoryProducts() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
   const params = useLocalSearchParams<{ category: string; title: string }>();
-  const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
 
   // --- Defers building the heavy grid until the push transition has
   // finished, so the skeleton is what paints instantly on tap ---
   const ready = useDeferredReady();
 
+  // --- Global wishlist state, shared with every other screen and the
+  // Wishlist tab itself ---
+  const wishlistedIds = useWishlistStore((s) => s.wishlistedIds);
+  const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
+
   const filtered = products.filter((item) =>
     matchesCategoryFilter(item.category, params.category),
   );
 
-  function toggleWishlist(id: string) {
-    setWishlisted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  function openProductDetails(id: string) {
+    router.push({ pathname: "/product-details", params: { id } });
   }
 
   if (!ready) {
@@ -212,8 +211,9 @@ export default function CategoryProducts() {
               item={item}
               colors={colors}
               styles={styles}
-              isWishlisted={wishlisted.has(item.id)}
+              isWishlisted={!!wishlistedIds[item.id]}
               onToggleWishlist={toggleWishlist}
+              onPress={() => openProductDetails(item.id)}
             />
           )}
         />

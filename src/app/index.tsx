@@ -1,12 +1,43 @@
+// Welcome screen — hero image collage, headline, and the entry point into
+// the sign-up flow.
+
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { router } from "expo-router";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  InteractionManager,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 export default function Welcome() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
+
+  // --- Busy state for the primary CTA. Navigating to sign-up isn't
+  // instant (that screen has to mount before the transition completes),
+  // so the button acknowledges the tap right away and guards against
+  // double-taps pushing the same screen twice. ---
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  function handleGetStarted() {
+    if (isNavigating) return;
+    setIsNavigating(true);
+
+    router.push("/sign-up");
+
+    // Clear the busy state once the navigation transition has settled, so
+    // the button is usable again if the user comes back to this screen.
+    InteractionManager.runAfterInteractions(() => {
+      setIsNavigating(false);
+    });
+  }
 
   return (
     <View style={styles.container}>
@@ -48,8 +79,16 @@ export default function Welcome() {
         Beautiful designs. Premium comfort.{"\n"}Made for the way you live.
       </Text>
 
-      <Pressable style={styles.cta} onPress={() => router.push("/sign-up")}>
-        <Text style={styles.ctaText}>Let&apos;s Get Started</Text>
+      <Pressable
+        style={[styles.cta, isNavigating && styles.ctaBusy]}
+        onPress={handleGetStarted}
+        disabled={isNavigating}
+      >
+        {isNavigating ? (
+          <ActivityIndicator color={colors.onAccent} size="small" />
+        ) : (
+          <Text style={styles.ctaText}>Let&apos;s Get Started</Text>
+        )}
       </Pressable>
 
       <Text style={styles.signInRow}>
@@ -158,7 +197,11 @@ function getStyles(colors: ThemeColors) {
       borderRadius: 32,
       paddingVertical: 18,
       alignItems: "center",
+      justifyContent: "center",
       marginTop: 32,
+    },
+    ctaBusy: {
+      opacity: 0.7,
     },
     ctaText: {
       fontFamily: Fonts.semiBold,
