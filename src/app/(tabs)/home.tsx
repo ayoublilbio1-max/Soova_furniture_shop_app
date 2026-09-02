@@ -1,6 +1,7 @@
 // Home tab — location header, search, promo banner carousel, category
-// shortcuts, flash sale, sort/filter product grid, best sellers, shipping banner.
+// shortcuts, flash sale, sort product grid, best sellers, shipping banner.
 
+import { AddToCartButton } from "@/components/ui/add-to-cart-button";
 import { HomeSkeleton } from "@/components/ui/home-skeleton";
 import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
@@ -12,6 +13,7 @@ import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useProfileStore } from "@/store/profile-store";
 import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -21,12 +23,10 @@ import {
   Animated,
   Easing,
   InteractionManager,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -35,12 +35,6 @@ const FILTERS = ["All", "Newest", "Popular"];
 const FLASH_SALE_SECONDS = 2 * 3600 + 12 * 60 + 56;
 const DEFAULT_LOCATION = "Casablanca, Morocco";
 const WISHLIST_ACTIVE_COLOR = "#DC143C";
-const RATING_OPTIONS = [
-  { label: "Any", value: 0 },
-  { label: "3+", value: 3 },
-  { label: "4+", value: 4 },
-  { label: "4.5+", value: 4.5 },
-];
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // Promo banner images live outside product data (they're editorial, not
@@ -73,20 +67,6 @@ const BANNER_SLIDES = [
   },
 ];
 
-type FilterState = {
-  minPrice: string;
-  maxPrice: string;
-  categoryIds: Set<string>;
-  minRating: number;
-};
-
-const EMPTY_FILTERS: FilterState = {
-  minPrice: "",
-  maxPrice: "",
-  categoryIds: new Set(),
-  minRating: 0,
-};
-
 // --- Product grid card (used in the main sort/filter section) ---
 type ProductCardProps = {
   item: Product;
@@ -94,7 +74,6 @@ type ProductCardProps = {
   styles: ReturnType<typeof getStyles>;
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
-  onAddToCart: () => void;
   onPress: () => void;
 };
 
@@ -104,39 +83,9 @@ function ProductCard({
   styles,
   isWishlisted,
   onToggleWishlist,
-  onAddToCart,
   onPress,
 }: ProductCardProps) {
-  const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
-  const cartScaleAnim = useRef(new Animated.Value(1)).current;
   const isBestSeller = bestSellerIds.has(item.id);
-
-  function popAnimation(anim: Animated.Value) {
-    Animated.sequence([
-      Animated.timing(anim, {
-        toValue: 1.3,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-
-  function handleWishlistPress() {
-    onToggleWishlist(item.id);
-    popAnimation(wishlistScaleAnim);
-  }
-
-  function handleCartPress() {
-    onAddToCart();
-    popAnimation(cartScaleAnim);
-  }
 
   return (
     <Pressable style={styles.productCard} onPress={onPress}>
@@ -158,19 +107,16 @@ function ProductCard({
         fallbackUri={item.fallbackThumbPath}
         style={styles.productImage}
       />
-      <AnimatedPressable
-        style={[
-          styles.wishlistButton,
-          { transform: [{ scale: wishlistScaleAnim }] },
-        ]}
-        onPress={handleWishlistPress}
+      <Pressable
+        style={styles.wishlistButton}
+        onPress={() => onToggleWishlist(item.id)}
       >
         <Ionicons
           name={isWishlisted ? "heart" : "heart-outline"}
           size={18}
           color={isWishlisted ? WISHLIST_ACTIVE_COLOR : colors.accent}
         />
-      </AnimatedPressable>
+      </Pressable>
 
       <Text style={styles.productName}>{item.name}</Text>
 
@@ -194,12 +140,7 @@ function ProductCard({
 
       <View style={styles.productFooter}>
         <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
-        <AnimatedPressable
-          style={[styles.cartButton, { transform: [{ scale: cartScaleAnim }] }]}
-          onPress={handleCartPress}
-        >
-          <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
-        </AnimatedPressable>
+        <AddToCartButton productId={item.id} colors={colors} size={32} />
       </View>
     </Pressable>
   );
@@ -243,64 +184,6 @@ function SeeAllButton({
       style={{ transform: [{ scale: scaleAnim }] }}
     >
       <Text style={styles.seeAll}>See All</Text>
-    </AnimatedPressable>
-  );
-}
-
-// --- Minimum rating chip used inside the filter modal ---
-function RatingChip({
-  label,
-  value,
-  activeValue,
-  colors,
-  styles,
-  onPress,
-}: {
-  label: string;
-  value: number;
-  activeValue: number;
-  colors: ThemeColors;
-  styles: ReturnType<typeof getStyles>;
-  onPress: () => void;
-}) {
-  const active = value === activeValue;
-  const colorAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(colorAnim, {
-      toValue: active ? 1 : 0,
-      duration: 200,
-      easing: Easing.ease,
-      useNativeDriver: false,
-    }).start();
-  }, [active, colorAnim]);
-
-  return (
-    <AnimatedPressable
-      style={[
-        styles.ratingChip,
-        {
-          backgroundColor: colorAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [colors.cardBackground, colors.accent],
-          }),
-        },
-      ]}
-      onPress={onPress}
-    >
-      <Animated.Text
-        style={[
-          styles.ratingChipText,
-          {
-            color: colorAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [colors.textPrimary, colors.onAccent],
-            }),
-          },
-        ]}
-      >
-        {label}
-      </Animated.Text>
     </AnimatedPressable>
   );
 }
@@ -359,35 +242,13 @@ function BestSellerRow({
   item,
   colors,
   styles,
-  onAddToCart,
   onPress,
 }: {
   item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
-  onAddToCart: () => void;
   onPress: () => void;
 }) {
-  const cartScaleAnim = useRef(new Animated.Value(1)).current;
-
-  function handleCartPress() {
-    onAddToCart();
-    Animated.sequence([
-      Animated.timing(cartScaleAnim, {
-        toValue: 1.2,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cartScaleAnim, {
-        toValue: 1,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-
   return (
     <Pressable style={styles.bestSellerRow} onPress={onPress}>
       <RemoteImage
@@ -405,15 +266,7 @@ function BestSellerRow({
         </View>
         <Text style={styles.bestSellerPrice}>${item.price.toFixed(2)}</Text>
       </View>
-      <AnimatedPressable
-        style={[
-          styles.bestSellerCartButton,
-          { transform: [{ scale: cartScaleAnim }] },
-        ]}
-        onPress={handleCartPress}
-      >
-        <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
-      </AnimatedPressable>
+      <AddToCartButton productId={item.id} colors={colors} size={36} />
     </Pressable>
   );
 }
@@ -490,16 +343,15 @@ export default function Home() {
   const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
 
   // --- Screen state ---
-  const [location, setLocation] = useState(params.location ?? DEFAULT_LOCATION);
+  const profileLocation = useProfileStore((s) => s.location);
+  const profileAvatarUri = useProfileStore((s) => s.avatarUri);
+  const [location, setLocation] = useState(
+    params.location ?? profileLocation ?? DEFAULT_LOCATION,
+  );
   const [activeFilter, setActiveFilter] = useState("Newest");
   const [timeLeft, setTimeLeft] = useState(FLASH_SALE_SECONDS);
   const [hasUnread, setHasUnread] = useState(true);
   const [gridTransitioning, setGridTransitioning] = useState(false);
-
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
-  const [appliedFilters, setAppliedFilters] =
-    useState<FilterState>(EMPTY_FILTERS);
 
   // --- Animated values ---
   // Live scroll position for each paginated horizontal scroller, driving
@@ -507,9 +359,6 @@ export default function Home() {
   const bannerScrollX = useRef(new Animated.Value(0)).current;
   const productScrollX = useRef(new Animated.Value(0)).current;
   const bellScaleAnim = useRef(new Animated.Value(1)).current;
-  const filterScaleAnim = useRef(new Animated.Value(1)).current;
-  const resetScaleAnim = useRef(new Animated.Value(1)).current;
-  const applyScaleAnim = useRef(new Animated.Value(1)).current;
 
   // --- Location coming back from the location-search/location-access screens ---
   useEffect(() => {
@@ -527,14 +376,14 @@ export default function Home() {
   }, []);
 
   // --- Reset the product pager's scroll position and show the grid
-  // skeleton for a beat whenever sort or filters change ---
+  // skeleton for a beat whenever sort changes ---
   useEffect(() => {
     productScrollX.setValue(0);
     const task = InteractionManager.runAfterInteractions(() => {
       setGridTransitioning(false);
     });
     return () => task.cancel();
-  }, [activeFilter, appliedFilters]);
+  }, [activeFilter]);
 
   const hours = Math.floor(timeLeft / 3600);
   const minutes = Math.floor((timeLeft % 3600) / 60);
@@ -558,33 +407,7 @@ export default function Home() {
     }
   }, [activeFilter]);
 
-  // --- Price/category/rating filter modal applied on top of the sort ---
-  const displayedProducts = useMemo(() => {
-    return sortedProducts.filter((item) => {
-      if (
-        appliedFilters.minPrice &&
-        item.price < Number(appliedFilters.minPrice)
-      ) {
-        return false;
-      }
-      if (
-        appliedFilters.maxPrice &&
-        item.price > Number(appliedFilters.maxPrice)
-      ) {
-        return false;
-      }
-      if (
-        appliedFilters.categoryIds.size > 0 &&
-        !appliedFilters.categoryIds.has(item.category)
-      ) {
-        return false;
-      }
-      if (item.rating < appliedFilters.minRating) {
-        return false;
-      }
-      return true;
-    });
-  }, [sortedProducts, appliedFilters]);
+  const displayedProducts = sortedProducts;
 
   // --- Split into 2-per-page chunks for the horizontal paging grid ---
   const productPages = useMemo(() => {
@@ -600,12 +423,6 @@ export default function Home() {
     () => [...products].sort((a, b) => b.salesCount - a.salesCount).slice(0, 3),
     [],
   );
-
-  const hasActiveFilters =
-    appliedFilters.minPrice !== "" ||
-    appliedFilters.maxPrice !== "" ||
-    appliedFilters.categoryIds.size > 0 ||
-    appliedFilters.minRating > 0;
 
   function notImplemented(label: string) {
     Alert.alert(
@@ -637,60 +454,6 @@ export default function Home() {
     router.push("/notifications");
   }
 
-  function handleFilterPressIn() {
-    Animated.timing(filterScaleAnim, {
-      toValue: 0.9,
-      duration: 100,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handleFilterPressOut() {
-    Animated.timing(filterScaleAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handleResetPressIn() {
-    Animated.timing(resetScaleAnim, {
-      toValue: 0.95,
-      duration: 100,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handleResetPressOut() {
-    Animated.timing(resetScaleAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handleApplyPressIn() {
-    Animated.timing(applyScaleAnim, {
-      toValue: 0.95,
-      duration: 100,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handleApplyPressOut() {
-    Animated.timing(applyScaleAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
   function handleCategoryPress(id: string, name: string) {
     if (id === "sofa") {
       router.push("/sofa-subcategories");
@@ -705,33 +468,6 @@ export default function Home() {
   function handleSortPress(filter: string) {
     setGridTransitioning(true);
     setActiveFilter(filter);
-  }
-
-  function openFilterModal() {
-    setDraftFilters(appliedFilters);
-    setFilterModalVisible(true);
-  }
-
-  function toggleDraftCategory(id: string) {
-    setDraftFilters((prev) => {
-      const next = new Set(prev.categoryIds);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return { ...prev, categoryIds: next };
-    });
-  }
-
-  function applyFilters() {
-    setGridTransitioning(true);
-    setAppliedFilters(draftFilters);
-    setFilterModalVisible(false);
-  }
-
-  function resetFilters() {
-    setDraftFilters(EMPTY_FILTERS);
   }
 
   if (!ready) {
@@ -781,7 +517,7 @@ export default function Home() {
           </AnimatedPressable>
         </View>
 
-        {/* --- Search bar + filter button --- */}
+        {/* --- Search bar + profile avatar --- */}
         <View style={styles.searchRow}>
           <Pressable
             style={styles.searchWrapper}
@@ -792,22 +528,19 @@ export default function Home() {
               Search furniture, categories...
             </Text>
           </Pressable>
-          <AnimatedPressable
-            style={[
-              styles.filterButton,
-              { transform: [{ scale: filterScaleAnim }] },
-            ]}
-            onPress={openFilterModal}
-            onPressIn={handleFilterPressIn}
-            onPressOut={handleFilterPressOut}
+          <Pressable
+            style={styles.avatarButton}
+            onPress={() => router.push("/(tabs)/account")}
           >
-            <Ionicons
-              name="options-outline"
-              size={20}
-              color={colors.onAccent}
-            />
-            {hasActiveFilters && <View style={styles.filterDot} />}
-          </AnimatedPressable>
+            {profileAvatarUri ? (
+              <RemoteImage
+                uri={profileAvatarUri}
+                style={styles.avatarButtonImage}
+              />
+            ) : (
+              <Ionicons name="person" size={20} color={colors.onAccent} />
+            )}
+          </Pressable>
         </View>
 
         {/* --- Promo banner carousel --- */}
@@ -963,7 +696,6 @@ export default function Home() {
                       styles={styles}
                       isWishlisted={!!wishlistedIds[item.id]}
                       onToggleWishlist={toggleWishlist}
-                      onAddToCart={() => notImplemented("Add to Cart")}
                       onPress={() => openProductDetails(item.id)}
                     />
                   ))}
@@ -996,7 +728,6 @@ export default function Home() {
             item={item}
             colors={colors}
             styles={styles}
-            onAddToCart={() => notImplemented("Add to Cart")}
             onPress={() => openProductDetails(item.id)}
           />
         ))}
@@ -1008,135 +739,6 @@ export default function Home() {
           onPress={() => notImplemented("Shipping Info")}
         />
       </ScrollView>
-
-      {/* --- Filter modal (price / category / rating) --- */}
-      <Modal
-        transparent
-        visible={filterModalVisible}
-        animationType="slide"
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <View style={styles.filterModalBackdrop}>
-          <View style={styles.filterModalCard}>
-            <View style={styles.filterModalHeader}>
-              <Text style={styles.filterModalTitle}>Filters</Text>
-              <Pressable onPress={() => setFilterModalVisible(false)}>
-                <Ionicons name="close" size={22} color={colors.textPrimary} />
-              </Pressable>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.filterSectionLabel}>Price Range</Text>
-              <View style={styles.priceRow}>
-                <View style={styles.priceInputWrapper}>
-                  <Text style={styles.priceCurrency}>$</Text>
-                  <TextInput
-                    style={styles.priceInput}
-                    placeholder="Min"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="numeric"
-                    value={draftFilters.minPrice}
-                    onChangeText={(text) =>
-                      setDraftFilters((prev) => ({ ...prev, minPrice: text }))
-                    }
-                  />
-                </View>
-                <Text style={styles.priceDash}>—</Text>
-                <View style={styles.priceInputWrapper}>
-                  <Text style={styles.priceCurrency}>$</Text>
-                  <TextInput
-                    style={styles.priceInput}
-                    placeholder="Max"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="numeric"
-                    value={draftFilters.maxPrice}
-                    onChangeText={(text) =>
-                      setDraftFilters((prev) => ({ ...prev, maxPrice: text }))
-                    }
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.filterSectionLabel}>Category</Text>
-              <View style={styles.categoryFilterList}>
-                {categories.map((category) => {
-                  const checked = draftFilters.categoryIds.has(category.id);
-                  return (
-                    <Pressable
-                      key={category.id}
-                      style={styles.categoryFilterRow}
-                      onPress={() => toggleDraftCategory(category.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkbox,
-                          checked && { backgroundColor: colors.accent },
-                        ]}
-                      >
-                        {checked && (
-                          <Ionicons
-                            name="checkmark"
-                            size={14}
-                            color={colors.onAccent}
-                          />
-                        )}
-                      </View>
-                      <Text style={styles.categoryFilterLabel}>
-                        {category.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.filterSectionLabel}>Minimum Rating</Text>
-              <View style={styles.ratingChipsRow}>
-                {RATING_OPTIONS.map((option) => (
-                  <RatingChip
-                    key={option.label}
-                    label={option.label}
-                    value={option.value}
-                    activeValue={draftFilters.minRating}
-                    colors={colors}
-                    styles={styles}
-                    onPress={() =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        minRating: option.value,
-                      }))
-                    }
-                  />
-                ))}
-              </View>
-            </ScrollView>
-
-            <View style={styles.filterActionsRow}>
-              <AnimatedPressable
-                style={[
-                  styles.resetButton,
-                  { transform: [{ scale: resetScaleAnim }] },
-                ]}
-                onPress={resetFilters}
-                onPressIn={handleResetPressIn}
-                onPressOut={handleResetPressOut}
-              >
-                <Text style={styles.resetButtonText}>Reset</Text>
-              </AnimatedPressable>
-              <AnimatedPressable
-                style={[
-                  styles.applyButton,
-                  { transform: [{ scale: applyScaleAnim }] },
-                ]}
-                onPress={applyFilters}
-                onPressIn={handleApplyPressIn}
-                onPressOut={handleApplyPressOut}
-              >
-                <Text style={styles.applyButtonText}>Apply Filters</Text>
-              </AnimatedPressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1195,7 +797,7 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       backgroundColor: colors.accent,
     },
 
-    // --- Search bar + filter button ---
+    // --- Search bar + profile avatar ---
     searchRow: {
       flexDirection: "row",
       gap: 10,
@@ -1217,22 +819,18 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       fontSize: 14,
       color: colors.textMuted,
     },
-    filterButton: {
+    avatarButton: {
       width: 52,
       height: 52,
-      borderRadius: 16,
+      borderRadius: 26,
       backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
+      overflow: "hidden",
     },
-    filterDot: {
-      position: "absolute",
-      top: 8,
-      right: 8,
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: "#FFFFFF",
+    avatarButtonImage: {
+      width: "100%",
+      height: "100%",
     },
 
     // --- Promo banner carousel ---
@@ -1493,14 +1091,6 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       fontSize: 15,
       color: colors.accent,
     },
-    cartButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
-    },
     emptyState: {
       alignItems: "center",
       justifyContent: "center",
@@ -1555,14 +1145,6 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       fontSize: 15,
       color: colors.accent,
     },
-    bestSellerCartButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
-    },
 
     // --- Free shipping banner ---
     shippingBanner: {
@@ -1597,140 +1179,6 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       fontSize: 12,
       lineHeight: 17,
       color: colors.textMuted,
-    },
-
-    // --- Filter modal ---
-    filterModalBackdrop: {
-      flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
-      justifyContent: "flex-end",
-    },
-    filterModalCard: {
-      backgroundColor: colors.background,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
-      paddingTop: 20,
-      paddingHorizontal: 24,
-      paddingBottom: 60,
-      maxHeight: "85%",
-    },
-    filterModalHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 20,
-    },
-    filterModalTitle: {
-      fontFamily: Fonts.bold,
-      fontSize: 18,
-      color: colors.textPrimary,
-    },
-    filterSectionLabel: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 14,
-      color: colors.textPrimary,
-      marginBottom: 12,
-      marginTop: 8,
-    },
-    priceRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      marginBottom: 8,
-    },
-    priceInputWrapper: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.cardBackground,
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      height: 48,
-    },
-    priceCurrency: {
-      fontFamily: Fonts.medium,
-      fontSize: 15,
-      color: colors.textMuted,
-      marginRight: 4,
-    },
-    priceInput: {
-      flex: 1,
-      fontFamily: Fonts.regular,
-      fontSize: 15,
-      color: colors.textPrimary,
-    },
-    priceDash: {
-      fontFamily: Fonts.medium,
-      color: colors.textMuted,
-    },
-    categoryFilterList: {
-      marginBottom: 8,
-    },
-    categoryFilterRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      paddingVertical: 10,
-    },
-    checkbox: {
-      width: 22,
-      height: 22,
-      borderRadius: 6,
-      borderWidth: 1.5,
-      borderColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    categoryFilterLabel: {
-      fontFamily: Fonts.regular,
-      fontSize: 15,
-      color: colors.textPrimary,
-    },
-    ratingChipsRow: {
-      flexDirection: "row",
-      gap: 10,
-      marginBottom: 20,
-    },
-    ratingChip: {
-      borderRadius: 20,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-    },
-    ratingChipText: {
-      fontFamily: Fonts.medium,
-      fontSize: 13,
-    },
-    filterActionsRow: {
-      flexDirection: "row",
-      gap: 12,
-      marginTop: 8,
-    },
-    resetButton: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 32,
-      borderWidth: 1,
-      borderColor: colors.outline,
-      paddingVertical: 16,
-    },
-    resetButtonText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 15,
-      color: colors.textPrimary,
-    },
-    applyButton: {
-      flex: 2,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.accent,
-      borderRadius: 32,
-      paddingVertical: 16,
-    },
-    applyButtonText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 15,
-      color: colors.onAccent,
     },
   });
 }

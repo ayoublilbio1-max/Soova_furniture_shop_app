@@ -38,7 +38,7 @@ export const darkColors: ThemeColors = {
   outline: "#3A2F26",
   placeholder: "#4A3C30",
   placeholderAlt: "#5A4A3C",
-  cardBackground: "#75614f",
+  cardBackground: "#493a2d",
   roseRed: "#FF2C2C",
   dealBg: "#f6eae0",
 };

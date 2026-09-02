@@ -7,6 +7,7 @@
 // description is a generic, non-product-specific demo paragraph — no real
 // per-product copy exists yet, and this avoids inventing fake specifics.
 
+import { AddToCartButton } from "@/components/ui/add-to-cart-button";
 import { ProductDetailsSkeleton } from "@/components/ui/product-details-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
 import { ScrollProgressBar } from "@/components/ui/scroll-progress-bar";
@@ -19,13 +20,12 @@ import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
 import { useEvent } from "expo";
+import { router, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Easing,
   Modal,
@@ -99,7 +99,12 @@ function FullImageModal({
   onClose: () => void;
 }) {
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <View style={styles.fullImageBackdrop}>
         <Pressable style={styles.fullImageCloseButton} onPress={onClose}>
           <Ionicons name="close" size={26} color="#FFFFFF" />
@@ -150,16 +155,26 @@ function VideoModal({
   }
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <View style={styles.videoBackdrop}>
         <Pressable style={styles.videoCloseButton} onPress={onClose}>
           <Ionicons name="close" size={26} color="#FFFFFF" />
         </Pressable>
         {status === "loading" && (
-          <ActivityIndicator color={colors.accent} style={StyleSheet.absoluteFill} />
+          <ActivityIndicator
+            color={colors.accent}
+            style={StyleSheet.absoluteFill}
+          />
         )}
         {status === "error" && useFallback ? (
-          <Text style={styles.videoErrorText}>Video unavailable right now.</Text>
+          <Text style={styles.videoErrorText}>
+            Video unavailable right now.
+          </Text>
         ) : (
           <VideoView style={styles.video} player={player} nativeControls />
         )}
@@ -186,8 +201,8 @@ export default function ProductDetails() {
   const [galleryPage, setGalleryPage] = useState(0);
   const [videoVisible, setVideoVisible] = useState(false);
   const [fullImageVisible, setFullImageVisible] = useState(false);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const heartScaleAnim = useRef(new Animated.Value(1)).current;
-  const cartScaleAnim = useRef(new Animated.Value(1)).current;
   const galleryScrollX = useRef(new Animated.Value(0)).current;
   const galleryScrollRef = useRef<ScrollView>(null);
   const galleryWidth = screenWidth - 48;
@@ -196,12 +211,17 @@ export default function ProductDetails() {
   const gallerySlides: GallerySlide[] = useMemo(() => {
     if (!product) return [];
     if (selectedColor !== DEFAULT_COLOR_ID) {
-      const variant = product.colorVariants?.find((c) => c.color === selectedColor);
+      const variant = product.colorVariants?.find(
+        (c) => c.color === selectedColor,
+      );
       if (variant) {
         return [{ uri: variant.full, fallbackUri: variant.fallbackFull }];
       }
     }
-    return product.images.map((img) => ({ uri: img.full, fallbackUri: img.fallbackFull }));
+    return product.images.map((img) => ({
+      uri: img.full,
+      fallbackUri: img.fallbackFull,
+    }));
   }, [product, selectedColor]);
 
   // --- Thumbnail row: photos (index-linked to the gallery) + the video
@@ -212,14 +232,26 @@ export default function ProductDetails() {
     const photoThumbs: { uri: string; fallbackUri: string }[] =
       selectedColor !== DEFAULT_COLOR_ID
         ? (() => {
-            const variant = product.colorVariants?.find((c) => c.color === selectedColor);
-            return variant ? [{ uri: variant.thumb, fallbackUri: variant.fallbackThumb }] : [];
+            const variant = product.colorVariants?.find(
+              (c) => c.color === selectedColor,
+            );
+            return variant
+              ? [{ uri: variant.thumb, fallbackUri: variant.fallbackThumb }]
+              : [];
           })()
-        : product.images.map((img) => ({ uri: img.thumb, fallbackUri: img.fallbackThumb }));
+        : product.images.map((img) => ({
+            uri: img.thumb,
+            fallbackUri: img.fallbackThumb,
+          }));
 
     const entries: ThumbEntry[] = [];
     photoThumbs.forEach((thumb, i) => {
-      entries.push({ kind: "image", uri: thumb.uri, fallbackUri: thumb.fallbackUri, galleryIndex: i });
+      entries.push({
+        kind: "image",
+        uri: thumb.uri,
+        fallbackUri: thumb.fallbackUri,
+        galleryIndex: i,
+      });
       if (i === 0 && product.videoPath) {
         entries.push({ kind: "video" });
       }
@@ -247,7 +279,10 @@ export default function ProductDetails() {
       return;
     }
     setGalleryPage(entry.galleryIndex);
-    galleryScrollRef.current?.scrollTo({ x: entry.galleryIndex * galleryWidth, animated: true });
+    galleryScrollRef.current?.scrollTo({
+      x: entry.galleryIndex * galleryWidth,
+      animated: true,
+    });
   }
 
   function handleWishlistPress() {
@@ -269,26 +304,8 @@ export default function ProductDetails() {
     ]).start();
   }
 
-  function handleAddToCart() {
-    Animated.sequence([
-      Animated.timing(cartScaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cartScaleAnim, {
-        toValue: 1,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    Alert.alert("Add to Cart", "This will continue once the corresponding screen is built.");
-  }
-
   function handleWriteReview() {
-    Alert.alert("Write a Review", "This will continue once the corresponding screen is built.");
+    setReviewModalVisible(true);
   }
 
   if (!ready) {
@@ -319,7 +336,10 @@ export default function ProductDetails() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* --- Header --- */}
         <View style={styles.header}>
           <Pressable style={styles.headerButton} onPress={() => router.back()}>
@@ -327,7 +347,10 @@ export default function ProductDetails() {
           </Pressable>
           <Text style={styles.headerTitle}>Product Details</Text>
           <AnimatedPressable
-            style={[styles.headerButton, { transform: [{ scale: heartScaleAnim }] }]}
+            style={[
+              styles.headerButton,
+              { transform: [{ scale: heartScaleAnim }] },
+            ]}
             onPress={handleWishlistPress}
           >
             <Ionicons
@@ -364,8 +387,9 @@ export default function ProductDetails() {
             [{ nativeEvent: { contentOffset: { x: galleryScrollX } } }],
             {
               useNativeDriver: true,
-              listener: (e: any) => handleGalleryScroll(e.nativeEvent.contentOffset.x),
-            }
+              listener: (e: any) =>
+                handleGalleryScroll(e.nativeEvent.contentOffset.x),
+            },
           )}
           scrollEventThrottle={16}
           style={{ marginBottom: 8 }}
@@ -392,10 +416,18 @@ export default function ProductDetails() {
         )}
 
         {/* --- Thumbnails (video sits right after the main photo) --- */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.thumbRow}
+        >
           {thumbEntries.map((entry, i) =>
             entry.kind === "video" ? (
-              <Pressable key="video" style={styles.videoThumb} onPress={() => handleThumbnailPress(entry)}>
+              <Pressable
+                key="video"
+                style={styles.videoThumb}
+                onPress={() => handleThumbnailPress(entry)}
+              >
                 <Ionicons name="play" size={22} color="#FFFFFF" />
               </Pressable>
             ) : (
@@ -405,18 +437,21 @@ export default function ProductDetails() {
                   fallbackUri={entry.fallbackUri}
                   style={[
                     styles.thumbImage,
-                    entry.galleryIndex === galleryPage && styles.thumbImageActive,
+                    entry.galleryIndex === galleryPage &&
+                      styles.thumbImageActive,
                   ]}
                 />
               </Pressable>
-            )
+            ),
           )}
         </ScrollView>
 
         {/* --- Title / category / rating --- */}
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.categoryLabel}>{getCategoryLabel(product.category)}</Text>
+            <Text style={styles.categoryLabel}>
+              {getCategoryLabel(product.category)}
+            </Text>
             <Text style={styles.title}>{product.name}</Text>
           </View>
           <View style={styles.ratingBadge}>
@@ -452,7 +487,10 @@ export default function ProductDetails() {
               key={variant.color}
               style={[
                 styles.colorSwatch,
-                { backgroundColor: COLOR_SWATCHES[variant.color] ?? colors.textMuted },
+                {
+                  backgroundColor:
+                    COLOR_SWATCHES[variant.color] ?? colors.textMuted,
+                },
                 selectedColor === variant.color && styles.colorSwatchActive,
               ]}
               onPress={() => setSelectedColor(variant.color)}
@@ -467,7 +505,11 @@ export default function ProductDetails() {
           <Ionicons name="star" size={20} color="#F5A623" />
         </View>
         <View style={styles.emptyReviewsBox}>
-          <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.textMuted} />
+          <Ionicons
+            name="chatbubble-ellipses-outline"
+            size={28}
+            color={colors.textMuted}
+          />
           <Text style={styles.emptyReviewsText}>
             No reviews yet. Be the first to review this product!
           </Text>
@@ -484,13 +526,12 @@ export default function ProductDetails() {
           <Text style={styles.footerLabel}>Total Price</Text>
           <Text style={styles.footerPrice}>${product.price.toFixed(2)}</Text>
         </View>
-        <AnimatedPressable
-          style={[styles.addToCartButton, { transform: [{ scale: cartScaleAnim }] }]}
-          onPress={handleAddToCart}
-        >
-          <Ionicons name="bag-handle-outline" size={18} color={colors.onAccent} />
-          <Text style={styles.addToCartText}>Add to Cart</Text>
-        </AnimatedPressable>
+        <AddToCartButton
+          productId={product.id}
+          colors={colors}
+          variant="full"
+          style={styles.footerAddToCartButton}
+        />
       </View>
 
       <FullImageModal
@@ -510,6 +551,47 @@ export default function ProductDetails() {
           onClose={() => setVideoVisible(false)}
         />
       )}
+
+      <Modal
+        transparent
+        visible={reviewModalVisible}
+        animationType="fade"
+        onRequestClose={() => setReviewModalVisible(false)}
+      >
+        <View style={styles.reviewModalBackdrop}>
+          <View style={styles.reviewModalCard}>
+            <View style={styles.reviewModalHeader}>
+              <Text style={styles.reviewModalTitle}>Reviews Coming Soon</Text>
+              <Pressable
+                style={styles.reviewModalCloseButton}
+                onPress={() => setReviewModalVisible(false)}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={20} color={colors.textPrimary} />
+              </Pressable>
+            </View>
+
+            <View style={styles.reviewModalDivider} />
+
+            <View style={styles.reviewModalIconCircle}>
+              <Ionicons name="create-outline" size={24} color={colors.accent} />
+            </View>
+
+            <Text style={styles.reviewModalMessage}>
+              The review feature is currently being prepared. This app is a
+              demonstration, and customer reviews will be available in a future
+              version.
+            </Text>
+
+            <Pressable
+              style={styles.reviewModalButton}
+              onPress={() => setReviewModalVisible(false)}
+            >
+              <Text style={styles.reviewModalButtonText}>Got it</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -714,6 +796,82 @@ function getStyles(colors: ThemeColors) {
       fontSize: 14,
       color: colors.onAccent,
     },
+    reviewModalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 24,
+    },
+    reviewModalCard: {
+      width: "100%",
+      maxWidth: 420,
+      backgroundColor: colors.background,
+      borderRadius: 24,
+      paddingHorizontal: 24,
+      paddingTop: 20,
+      paddingBottom: 24,
+    },
+    reviewModalHeader: {
+      minHeight: 36,
+      alignItems: "center",
+      justifyContent: "center",
+      position: "relative",
+    },
+    reviewModalTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+      textAlign: "center",
+      paddingHorizontal: 40,
+    },
+    reviewModalCloseButton: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.cardBackground,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reviewModalDivider: {
+      height: 1,
+      backgroundColor: colors.outline,
+      marginTop: 16,
+      marginBottom: 22,
+    },
+    reviewModalIconCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.cardBackground,
+      alignSelf: "center",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 18,
+    },
+    reviewModalMessage: {
+      fontFamily: Fonts.regular,
+      fontSize: 14,
+      lineHeight: 21,
+      color: colors.textMuted,
+      textAlign: "center",
+      marginBottom: 24,
+    },
+    reviewModalButton: {
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 15,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reviewModalButtonText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.onAccent,
+    },
 
     footer: {
       position: "absolute",
@@ -741,19 +899,9 @@ function getStyles(colors: ThemeColors) {
       fontSize: 22,
       color: colors.accent,
     },
-    addToCartButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: colors.accent,
-      borderRadius: 28,
-      paddingVertical: 16,
+    footerAddToCartButton: {
       paddingHorizontal: 24,
-    },
-    addToCartText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 15,
-      color: colors.onAccent,
+      minWidth: 170,
     },
 
     emptyState: {
@@ -768,29 +916,6 @@ function getStyles(colors: ThemeColors) {
       fontSize: 14,
       color: colors.textMuted,
       textAlign: "center",
-    },
-
-    fullImageBackdrop: {
-      flex: 1,
-      backgroundColor: "#000000",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    fullImageCloseButton: {
-      position: "absolute",
-      top: 60,
-      right: 24,
-      zIndex: 1,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: "rgba(255,255,255,0.15)",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    fullImage: {
-      width: "100%",
-      height: "80%",
     },
 
     videoBackdrop: {
@@ -819,6 +944,29 @@ function getStyles(colors: ThemeColors) {
       fontFamily: Fonts.medium,
       fontSize: 14,
       color: "#FFFFFF",
+    },
+
+    fullImageBackdrop: {
+      flex: 1,
+      backgroundColor: "#000000",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    fullImageCloseButton: {
+      position: "absolute",
+      top: 60,
+      right: 24,
+      zIndex: 1,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: "rgba(255,255,255,0.15)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    fullImage: {
+      width: "100%",
+      height: "80%",
     },
   });
 }

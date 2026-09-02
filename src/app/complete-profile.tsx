@@ -1,6 +1,7 @@
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useProfileStore } from "@/store/profile-store";
 import { Ionicons } from "@expo/vector-icons";
 import * as countryCodesList from "country-codes-list";
 import * as ImagePicker from "expo-image-picker";
@@ -53,6 +54,7 @@ export default function CompleteProfile() {
   const insets = useSafeAreaInsets();
   const styles = getStyles(colors, insets.bottom, insets.top);
   const params = useLocalSearchParams<{ source?: string; name?: string }>();
+  const setProfile = useProfileStore((s) => s.setProfile);
 
   const [showBanner, setShowBanner] = useState(!!params.source);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -69,9 +71,7 @@ export default function CompleteProfile() {
   // --- Busy state shared by both navigation buttons, so a tap is
   // acknowledged immediately and neither button can be double-fired
   // (or both fired at once) while the transition is in flight. ---
-  const [pendingAction, setPendingAction] = useState<
-    "complete" | "skip" | null
-  >(null);
+const [pendingAction, setPendingAction] = useState<"complete" | "skip" | null>(null);
 
   const filteredCountries = useMemo(() => {
     if (!countrySearch.trim()) return ALL_COUNTRIES;
@@ -123,6 +123,24 @@ export default function CompleteProfile() {
   function navigateToLocation(action: "complete" | "skip") {
     if (pendingAction) return;
     setPendingAction(action);
+
+    if (action === "complete") {
+      setProfile({
+        name: name.trim() || "John Doe",
+        avatarUri,
+        phone: phone.trim(),
+        countryIsoCode: selectedCountry.isoCode,
+        countryDialCode: selectedCountry.dialCode,
+        gender,
+      });
+    } else {
+      // Skip: still keep whatever avatar/name they'd already picked
+      // before bailing out, so it's not silently lost.
+      setProfile({
+        name: name.trim() || "John Doe",
+        avatarUri,
+      });
+    }
 
     router.push("/location-access");
 

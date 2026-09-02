@@ -1,11 +1,14 @@
 // Shop tab — search + photo search, Explore/New Sale/Vintage/Modern tabs,
 // promo banner with countdown, sale coupons row, infinite-scroll product grid.
 
+import { AddToCartButton } from "@/components/ui/add-to-cart-button";
+import { CouponCard } from "@/components/ui/coupon-card";
 import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
 import { ShopSkeleton } from "@/components/ui/shop-skeleton";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
+import { SHOP_COUPONS } from "@/data/coupons";
 import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
@@ -43,21 +46,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "new-sale", label: "New Sale" },
   { id: "vintage", label: "Vintage" },
   { id: "modern", label: "Modern" },
-];
-
-type Coupon = {
-  id: string;
-  amountOff: number;
-  minOrder: number;
-  code?: string;
-  isSpecial?: boolean;
-};
-
-const COUPONS: Coupon[] = [
-  { id: "c1", amountOff: 5, minOrder: 50, isSpecial: true },
-  { id: "c2", amountOff: 2, minOrder: 20, isSpecial: true },
-  { id: "c3", amountOff: 50, minOrder: 400, code: "SOOVA55" },
-  { id: "c4", amountOff: 3, minOrder: 30, code: "SOOVA10" },
 ];
 
 // --- Category-style tab chip (Explore / New Sale / Vintage / Modern) ---
@@ -178,69 +166,6 @@ function SaleBanner({
   );
 }
 
-// --- Single "Sale coupons" card, toggles to a collected state on tap ---
-function CouponCard({
-  coupon,
-  colors,
-  styles,
-}: {
-  coupon: Coupon;
-  colors: ThemeColors;
-  styles: ReturnType<typeof getStyles>;
-}) {
-  const [collected, setCollected] = useState(false);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  function handleCollect() {
-    setCollected(true);
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 1.05,
-        duration: 100,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-
-  return (
-    <Animated.View
-      style={[styles.couponCard, { transform: [{ scale: scaleAnim }] }]}
-    >
-      <Text style={styles.couponAmount}>
-        ${coupon.amountOff} <Text style={styles.couponOff}>OFF</Text>
-      </Text>
-      <Text style={styles.couponMinOrder}>orders ${coupon.minOrder}+</Text>
-      <View style={styles.couponDivider} />
-      {coupon.isSpecial ? (
-        <View style={styles.couponSpecialTag}>
-          <Text style={styles.couponSpecialText}>Special coupon</Text>
-        </View>
-      ) : (
-        <Text style={styles.couponCode}>{coupon.code}</Text>
-      )}
-      <Pressable
-        style={[
-          styles.collectButton,
-          collected && styles.collectButtonCollected,
-        ]}
-        onPress={handleCollect}
-        disabled={collected}
-      >
-        <Text style={styles.collectButtonText}>
-          {collected ? "Collected" : "Collect"}
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
 // --- Product grid card: badges, title, sale/rating, price/cart ---
 type ShopProductCardProps = {
   item: Product;
@@ -248,7 +173,6 @@ type ShopProductCardProps = {
   styles: ReturnType<typeof getStyles>;
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
-  onAddToCart: () => void;
   onPress: () => void;
 };
 
@@ -258,38 +182,27 @@ function ShopProductCard({
   styles,
   isWishlisted,
   onToggleWishlist,
-  onAddToCart,
   onPress,
 }: ShopProductCardProps) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
-  const cartScaleAnim = useRef(new Animated.Value(1)).current;
   const isBestSeller = bestSellerIds.has(item.id);
 
-  function popAnimation(anim: Animated.Value) {
+  function handleWishlistPress() {
+    onToggleWishlist(item.id);
     Animated.sequence([
-      Animated.timing(anim, {
+      Animated.timing(wishlistScaleAnim, {
         toValue: 1.3,
         duration: 150,
         easing: Easing.ease,
         useNativeDriver: true,
       }),
-      Animated.timing(anim, {
+      Animated.timing(wishlistScaleAnim, {
         toValue: 1,
         duration: 150,
         easing: Easing.ease,
         useNativeDriver: true,
       }),
     ]).start();
-  }
-
-  function handleWishlistPress() {
-    onToggleWishlist(item.id);
-    popAnimation(wishlistScaleAnim);
-  }
-
-  function handleCartPress() {
-    onAddToCart();
-    popAnimation(cartScaleAnim);
   }
 
   return (
@@ -348,12 +261,7 @@ function ShopProductCard({
 
       <View style={styles.productFooter}>
         <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
-        <AnimatedPressable
-          style={[styles.cartButton, { transform: [{ scale: cartScaleAnim }] }]}
-          onPress={handleCartPress}
-        >
-          <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
-        </AnimatedPressable>
+        <AddToCartButton productId={item.id} colors={colors} size={32} />
       </View>
     </Pressable>
   );
@@ -424,13 +332,6 @@ export default function Shop() {
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   const hasMore = visibleCount < filteredProducts.length;
-
-  function notImplemented(label: string) {
-    Alert.alert(
-      label,
-      "This will continue once the corresponding screen is built.",
-    );
-  }
 
   function openProductDetails(id: string) {
     router.push({ pathname: "/product-details", params: { id } });
@@ -553,29 +454,18 @@ export default function Shop() {
 
             {/* --- Sale coupons header --- */}
             <View style={styles.couponHeaderRow}>
-              <Pressable
-                style={styles.couponHeaderLeft}
-                onPress={() => notImplemented("Sale Coupons")}
-              >
-                <Text style={styles.couponHeaderTitle}>
-                  <Text style={{ color: colors.accent }}>Sale</Text> coupons
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={colors.textPrimary}
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => notImplemented("Coupon Applicable Items")}
-              >
-                <Text style={styles.couponApplicableLink}>
-                  <Text style={{ color: colors.accent }}>
-                    Coupon applicable
-                  </Text>{" "}
-                  items
-                </Text>
-              </Pressable>
+              <Text style={styles.couponHeaderTitle}>
+                <Text style={{ color: colors.accent }}>Sale</Text> coupons
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textPrimary}
+              />
+              <Text style={styles.couponApplicableLink}>
+                <Text style={{ color: colors.accent }}>Coupon applicable</Text>{" "}
+                items
+              </Text>
             </View>
 
             {/* --- Sale coupons row --- */}
@@ -584,13 +474,8 @@ export default function Shop() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.couponsRow}
             >
-              {COUPONS.map((coupon) => (
-                <CouponCard
-                  key={coupon.id}
-                  coupon={coupon}
-                  colors={colors}
-                  styles={styles}
-                />
+              {SHOP_COUPONS.map((coupon) => (
+                <CouponCard key={coupon.id} coupon={coupon} colors={colors} />
               ))}
             </ScrollView>
           </>
@@ -626,7 +511,6 @@ export default function Shop() {
             styles={styles}
             isWishlisted={!!wishlistedIds[item.id]}
             onToggleWishlist={toggleWishlist}
-            onAddToCart={() => notImplemented("Add to Cart")}
             onPress={() => openProductDetails(item.id)}
           />
         )}
@@ -735,7 +619,7 @@ function getStyles(colors: ThemeColors) {
 
     // --- Sale banner ---
     banner: {
-      backgroundColor: colors.dealBg,
+      backgroundColor: colors.cardBackground,
       borderRadius: 24,
       padding: 20,
       marginBottom: 24,
@@ -792,7 +676,7 @@ function getStyles(colors: ThemeColors) {
       color: colors.textMuted,
     },
 
-    // --- Sale coupons ---
+    // --- Sale coupons (layout only — card styling lives in CouponCard) ---
     couponHeaderRow: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -817,73 +701,6 @@ function getStyles(colors: ThemeColors) {
     couponsRow: {
       gap: 12,
       marginBottom: 28,
-    },
-    couponCard: {
-      width: 140,
-      backgroundColor: colors.dealBg,
-      borderRadius: 16,
-      padding: 16,
-      alignItems: "center",
-    },
-    couponAmount: {
-      fontFamily: Fonts.bold,
-      fontSize: 18,
-      color: colors.accent,
-      marginBottom: 4,
-    },
-    couponOff: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 12,
-      color: colors.accent,
-    },
-    couponMinOrder: {
-      fontFamily: Fonts.regular,
-      fontSize: 12,
-      color: colors.textMuted,
-      marginBottom: 12,
-      textAlign: "center",
-    },
-    couponDivider: {
-      width: "100%",
-      height: 1,
-      borderStyle: "dashed",
-      borderWidth: 1,
-      borderColor: colors.outline,
-      marginBottom: 12,
-    },
-    couponSpecialTag: {
-      backgroundColor: colors.background,
-      borderRadius: 12,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      marginBottom: 12,
-    },
-    couponSpecialText: {
-      fontFamily: Fonts.medium,
-      fontSize: 11,
-      color: colors.textPrimary,
-    },
-    couponCode: {
-      fontFamily: Fonts.bold,
-      fontSize: 13,
-      color: colors.textPrimary,
-      marginBottom: 12,
-    },
-    collectButton: {
-      backgroundColor: colors.accent,
-      borderRadius: 20,
-      paddingHorizontal: 20,
-      paddingVertical: 8,
-      width: "100%",
-      alignItems: "center",
-    },
-    collectButtonCollected: {
-      backgroundColor: colors.textMuted,
-    },
-    collectButtonText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 13,
-      color: colors.onAccent,
     },
 
     // --- Product grid ---
@@ -986,14 +803,6 @@ function getStyles(colors: ThemeColors) {
       fontFamily: Fonts.bold,
       fontSize: 15,
       color: colors.accent,
-    },
-    cartButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
     },
     loadingIndicator: {
       marginVertical: 20,

@@ -3,6 +3,7 @@
 // remove items from just this list (they stay in the overall wishlist),
 // and delete the whole list.
 
+import { AddToCartButton } from "@/components/ui/add-to-cart-button";
 import { RemoteImage } from "@/components/ui/remote-image";
 import { WishlistListSkeleton } from "@/components/ui/wishlist-list-skeleton";
 import { ThemeColors } from "@/constants/colors";
@@ -34,14 +35,12 @@ function ListDetailRow({
   item,
   colors,
   styles,
-  onAddToCart,
   onRemoveFromList,
   onPress,
 }: {
   item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
-  onAddToCart: () => void;
   onRemoveFromList: () => void;
   onPress: () => void;
 }) {
@@ -121,9 +120,12 @@ function ListDetailRow({
         </View>
 
         <View style={styles.rowActions}>
-          <Pressable style={styles.addToCartButton} onPress={onAddToCart}>
-            <Text style={styles.addToCartText}>Add to Cart</Text>
-          </Pressable>
+          <AddToCartButton
+            productId={item.id}
+            colors={colors}
+            variant="full"
+            style={styles.addToCartButtonFlex}
+          />
           <Pressable style={styles.removeButton} onPress={onRemoveFromList}>
             <Ionicons name="close" size={18} color={colors.textMuted} />
           </Pressable>
@@ -152,13 +154,6 @@ export default function WishlistListDetail() {
       .map((id) => products.find((p) => p.id === id))
       .filter((p): p is Product => !!p);
   }, [list]);
-
-  function notImplemented(label: string) {
-    Alert.alert(
-      label,
-      "This will continue once the corresponding screen is built.",
-    );
-  }
 
   function openProductDetails(id: string) {
     router.push({ pathname: "/product-details", params: { id } });
@@ -242,7 +237,6 @@ export default function WishlistListDetail() {
               item={item}
               colors={colors}
               styles={styles}
-              onAddToCart={() => notImplemented("Add to Cart")}
               onRemoveFromList={() => removeFromList(list.id, item.id)}
               onPress={() => openProductDetails(item.id)}
             />
@@ -397,17 +391,8 @@ function getStyles(colors: ThemeColors) {
       flexDirection: "row",
       gap: 8,
     },
-    addToCartButton: {
+    addToCartButtonFlex: {
       flex: 1,
-      backgroundColor: colors.accent,
-      borderRadius: 20,
-      paddingVertical: 10,
-      alignItems: "center",
-    },
-    addToCartText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 13,
-      color: colors.onAccent,
     },
     removeButton: {
       width: 40,

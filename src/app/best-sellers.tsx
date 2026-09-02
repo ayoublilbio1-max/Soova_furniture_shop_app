@@ -2,6 +2,7 @@
 // Category filter chips show real per-category counts (sofa subtypes grouped
 // together); every card here shows the "Best Seller" badge unconditionally.
 
+import { AddToCartButton } from "@/components/ui/add-to-cart-button";
 import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +18,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Easing,
   FlatList,
@@ -105,36 +105,23 @@ function BestSellerCard({
   onPress: () => void;
 }) {
   const wishlistScaleAnim = useRef(new Animated.Value(1)).current;
-  const cartScaleAnim = useRef(new Animated.Value(1)).current;
 
-  function popAnimation(anim: Animated.Value) {
+  function handleWishlistPress() {
+    onToggleWishlist(item.id);
     Animated.sequence([
-      Animated.timing(anim, {
+      Animated.timing(wishlistScaleAnim, {
         toValue: 1.3,
         duration: 150,
         easing: Easing.ease,
         useNativeDriver: true,
       }),
-      Animated.timing(anim, {
+      Animated.timing(wishlistScaleAnim, {
         toValue: 1,
         duration: 150,
         easing: Easing.ease,
         useNativeDriver: true,
       }),
     ]).start();
-  }
-
-  function handleWishlistPress() {
-    onToggleWishlist(item.id);
-    popAnimation(wishlistScaleAnim);
-  }
-
-  function handleCartPress() {
-    popAnimation(cartScaleAnim);
-    Alert.alert(
-      "Add to Cart",
-      "This will continue once the corresponding screen is built.",
-    );
   }
 
   return (
@@ -192,12 +179,7 @@ function BestSellerCard({
 
       <View style={styles.productFooter}>
         <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
-        <AnimatedPressable
-          style={[styles.cartButton, { transform: [{ scale: cartScaleAnim }] }]}
-          onPress={handleCartPress}
-        >
-          <Ionicons name="cart-outline" size={18} color={colors.onAccent} />
-        </AnimatedPressable>
+        <AddToCartButton productId={item.id} colors={colors} size={32} />
       </View>
     </Pressable>
   );
@@ -499,14 +481,6 @@ function getStyles(colors: ThemeColors) {
       fontFamily: Fonts.bold,
       fontSize: 15,
       color: colors.accent,
-    },
-    cartButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
     },
     emptyState: {
       alignItems: "center",

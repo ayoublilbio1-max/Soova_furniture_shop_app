@@ -1,31 +1,506 @@
+// Account tab — Profile screen featuring a themed empty avatar circle with an edit badge,
+// device photo selection via expo-image-picker, navigation links, and logout sheet.
+
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
+import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { StyleSheet, Text, View } from "react-native";
+import { useProfileStore } from "@/store/profile-store";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { router } from "expo-router";
+import { useState } from "react";
+import {
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+type MenuItem = {
+  id: string;
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route?: string;
+  action?: () => void;
+  isDestructive?: boolean;
+};
+
+// Menu items whose screens aren't built yet — tapping these opens the
+// "Coming Soon" sheet instead of navigating to a dead route.
+const NOT_YET_BUILT = new Set([
+  "orders",
+  "coupons",
+  "settings",
+  "help",
+  "privacy",
+]);
 
 export default function Account() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
+  const ready = useDeferredReady();
+
+  const profileName = useProfileStore((s) => s.name);
+  const profileAvatarUri = useProfileStore((s) => s.avatarUri);
+  const setProfile = useProfileStore((s) => s.setProfile);
+
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [comingSoonVisible, setComingSoonVisible] = useState(false);
+  const [comingSoonTitle, setComingSoonTitle] = useState("");
+
+  const menuItems: MenuItem[] = [
+    {
+      id: "profile",
+      title: "Your profile",
+      icon: "person-outline",
+      route: "/edit-profile",
+    },
+    {
+      id: "address",
+      title: "Manage Address",
+      icon: "location-outline",
+      route: "/shipping-address",
+    },
+    {
+      id: "payment",
+      title: "Payment Methods",
+      icon: "card-outline",
+      route: "/payment-methods",
+    },
+    {
+      id: "orders",
+      title: "My Orders",
+      icon: "receipt-outline",
+    },
+    {
+      id: "coupons",
+      title: "My Coupons",
+      icon: "pricetag-outline",
+    },
+    {
+      id: "settings",
+      title: "Settings",
+      icon: "settings-outline",
+    },
+    {
+      id: "help",
+      title: "Help Center",
+      icon: "help-circle-outline",
+    },
+    {
+      id: "privacy",
+      title: "Privacy Policy",
+      icon: "shield-checkmark-outline",
+    },
+    {
+      id: "logout",
+      title: "Log out",
+      icon: "log-out-outline",
+      action: () => setLogoutModalVisible(true),
+      isDestructive: true,
+    },
+  ];
+
+  async function handlePickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Denied",
+        "Permission to access photo library is required to choose a profile picture.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setProfile({ avatarUri: result.assets[0].uri });
+    }
+  }
+
+  function handleItemPress(item: MenuItem) {
+    if (item.action) {
+      item.action();
+      return;
+    }
+    if (NOT_YET_BUILT.has(item.id)) {
+      setComingSoonTitle(item.title);
+      setComingSoonVisible(true);
+      return;
+    }
+    if (item.route) {
+      router.push(item.route as any);
+    }
+  }
+
+  function handleLogout() {
+    setLogoutModalVisible(false);
+    router.replace("/sign-in" as any);
+  }
+
+  if (!ready) {
+    return <View style={styles.screen} />;
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Account — coming soon</Text>
+    <View style={styles.screen}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Profile</Text>
+        </View>
+
+        {/* Profile Avatar & Name */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            {profileAvatarUri ? (
+              <Image
+                source={{ uri: profileAvatarUri }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="person" size={52} color={colors.textMuted} />
+              </View>
+            )}
+            <Pressable
+              style={styles.editAvatarButton}
+              onPress={handlePickImage}
+            >
+              <Ionicons name="pencil" size={14} color="#FFFFFF" />
+            </Pressable>
+          </View>
+          <Text style={styles.userName}>{profileName}</Text>
+        </View>
+
+        {/* Menu Items */}
+        <View style={styles.menuContainer}>
+          {menuItems.map((item) => (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [
+                styles.menuRow,
+                pressed && styles.menuRowPressed,
+              ]}
+              onPress={() => handleItemPress(item)}
+            >
+              <View style={styles.menuRowLeft}>
+                <Ionicons
+                  name={item.icon}
+                  size={22}
+                  color={
+                    item.isDestructive ? colors.roseRed : colors.textPrimary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.menuText,
+                    item.isDestructive && { color: colors.roseRed },
+                  ]}
+                >
+                  {item.title}
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.textMuted}
+              />
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
+
+      {/* Logout Sheet Modal */}
+      <Modal
+        transparent
+        visible={logoutModalVisible}
+        animationType="slide"
+        onRequestClose={() => setLogoutModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={styles.modalBackdropTap}
+            onPress={() => setLogoutModalVisible(false)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Logout</Text>
+            <View style={styles.divider} />
+            <Text style={styles.sheetMessage}>
+              Are you sure you want to log out?
+            </Text>
+
+            <View style={styles.sheetActionsRow}>
+              <Pressable
+                style={styles.cancelButton}
+                onPress={() => setLogoutModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.logoutButton} onPress={handleLogout}>
+                <Text style={styles.logoutButtonText}>Yes, Logout</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Coming Soon Modal — matches app's demo-limitation modal style */}
+      <Modal
+        transparent
+        visible={comingSoonVisible}
+        animationType="fade"
+        onRequestClose={() => setComingSoonVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={styles.modalBackdropTap}
+            onPress={() => setComingSoonVisible(false)}
+          />
+          <View style={styles.comingSoonCard}>
+            <View style={styles.comingSoonIconCircle}>
+              <Ionicons
+                name="construct-outline"
+                size={28}
+                color={colors.accent}
+              />
+            </View>
+            <Text style={styles.comingSoonTitle}>{comingSoonTitle}</Text>
+            <Text style={styles.comingSoonBody}>
+              This section is still being built. Check back soon!
+            </Text>
+            <Pressable
+              style={styles.gotItButton}
+              onPress={() => setComingSoonVisible(false)}
+            >
+              <Text style={styles.gotItButtonText}>Got It</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 function getStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: {
+    screen: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    scrollContent: {
+      paddingTop: 60,
+      paddingHorizontal: 24,
+      paddingBottom: 40,
+    },
+    header: {
       alignItems: "center",
       justifyContent: "center",
+      marginBottom: 28,
     },
-    text: {
-      fontFamily: Fonts.medium,
-      fontSize: 16,
+    headerTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
       color: colors.textPrimary,
+    },
+    profileSection: {
+      alignItems: "center",
+      marginBottom: 32,
+    },
+    avatarContainer: {
+      position: "relative",
+      width: 100,
+      height: 100,
+      marginBottom: 16,
+    },
+    avatarPlaceholder: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.cardBackground,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: colors.outline,
+    },
+    avatarImage: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+    },
+    editAvatarButton: {
+      position: "absolute",
+      bottom: 2,
+      right: 2,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: colors.accent,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: colors.background,
+    },
+    userName: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+    },
+    menuContainer: {
+      gap: 16,
+    },
+    menuRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+    },
+    menuRowPressed: {
+      opacity: 0.7,
+    },
+    menuRowLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+    menuText: {
+      fontFamily: Fonts.medium,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    modalBackdropTap: {
+      flex: 1,
+    },
+    sheetCard: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      paddingBottom: 40,
+      alignItems: "center",
+    },
+    sheetHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.outline,
+      marginBottom: 16,
+    },
+    sheetTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.roseRed,
+      marginBottom: 16,
+    },
+    divider: {
+      width: "100%",
+      height: 1,
+      backgroundColor: colors.outline,
+      marginBottom: 20,
+    },
+    sheetMessage: {
+      fontFamily: Fonts.medium,
+      fontSize: 15,
+      color: colors.textPrimary,
+      textAlign: "center",
+      marginBottom: 28,
+    },
+    sheetActionsRow: {
+      flexDirection: "row",
+      gap: 12,
+      width: "100%",
+    },
+    cancelButton: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1.5,
+      borderColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 14,
+    },
+    cancelButtonText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.accent,
+    },
+    logoutButton: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 14,
+    },
+    logoutButtonText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.onAccent,
+    },
+    comingSoonCard: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 24,
+      paddingTop: 32,
+      paddingBottom: 40,
+      alignItems: "center",
+    },
+    comingSoonIconCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.cardBackground,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+    comingSoonTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
+    comingSoonBody: {
+      fontFamily: Fonts.medium,
+      fontSize: 14,
+      color: colors.textMuted,
+      textAlign: "center",
+      marginBottom: 28,
+    },
+    gotItButton: {
+      width: "100%",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 14,
+    },
+    gotItButtonText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.onAccent,
     },
   });
 }

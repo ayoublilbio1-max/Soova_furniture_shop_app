@@ -2,6 +2,7 @@
 // (user-created named collections). Add-to-list picker lets you organize
 // wishlisted items into lists on the spot.
 
+import { AddToCartButton } from "@/components/ui/add-to-cart-button";
 import { RemoteImage } from "@/components/ui/remote-image";
 import {
   WishlistListsSkeleton,
@@ -20,7 +21,6 @@ import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Easing,
   FlatList,
@@ -102,14 +102,12 @@ function WishlistRow({
   item,
   colors,
   styles,
-  onAddToCart,
   onOpenAddToList,
   onPress,
 }: {
   item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
-  onAddToCart: () => void;
   onOpenAddToList: () => void;
   onPress: () => void;
 }) {
@@ -189,9 +187,12 @@ function WishlistRow({
         </View>
 
         <View style={styles.rowActions}>
-          <Pressable style={styles.addToCartButton} onPress={onAddToCart}>
-            <Text style={styles.addToCartText}>Add to Cart</Text>
-          </Pressable>
+          <AddToCartButton
+            productId={item.id}
+            colors={colors}
+            variant="full"
+            style={styles.addToCartButtonFlex}
+          />
           <Pressable style={styles.addToListButton} onPress={onOpenAddToList}>
             <Ionicons name="bookmark-outline" size={18} color={colors.accent} />
           </Pressable>
@@ -270,11 +271,11 @@ export default function Wishlist() {
   const [addToListProductId, setAddToListProductId] = useState<string | null>(
     null,
   );
-  // Remembers which product the create-list flow was started from, so the
-  // new list isn't created empty when you reach it via a product's
-  // "add to list" picker. Null when creating from the "Make a wishlist"
-  // button, where there's no product context.
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
+
+  // --- Styled delete-list confirmation, replacing the plain OS Alert ---
+  const [pendingDeleteList, setPendingDeleteList] =
+    useState<WishlistCollection | null>(null);
 
   const wishlistedProducts = useMemo(
     () => products.filter((p) => wishlistedIds[p.id]),
@@ -292,13 +293,6 @@ export default function Wishlist() {
     if (id === activeTab) return;
     setTabTransitioning(true);
     setActiveTab(id);
-  }
-
-  function notImplemented(label: string) {
-    Alert.alert(
-      label,
-      "This will continue once the corresponding screen is built.",
-    );
   }
 
   function openProductDetails(id: string) {
@@ -320,14 +314,9 @@ export default function Wishlist() {
     const trimmed = newListName.trim();
     if (!trimmed || isCreatingList) return;
 
-    // Immediate visual feedback — the store write and the resulting
-    // re-render aren't instant, so without this the button looks dead
-    // for a moment after tapping.
     setIsCreatingList(true);
 
     const newListId = createList(trimmed);
-    // If this flow started from a specific product, put that product in
-    // the list right away rather than leaving it empty.
     if (pendingProductId) {
       addToList(newListId, pendingProductId);
     }
@@ -336,19 +325,10 @@ export default function Wishlist() {
     closeCreateListModal();
   }
 
-  function handleDeleteList(listId: string, name: string) {
-    Alert.alert(
-      `Delete "${name}"?`,
-      "This won't remove the items from your wishlist.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => deleteList(listId),
-        },
-      ],
-    );
+  function confirmDeleteList() {
+    if (!pendingDeleteList) return;
+    deleteList(pendingDeleteList.id);
+    setPendingDeleteList(null);
   }
 
   // --- Wait for both the deferred-mount skeleton AND the wishlist store's
@@ -369,7 +349,7 @@ export default function Wishlist() {
         <Text style={styles.headerTitle}>Wishlist</Text>
         <Pressable
           style={styles.cartButton}
-          onPress={() => notImplemented("Cart")}
+          onPress={() => router.push("/cart")}
         >
           <Ionicons name="cart-outline" size={20} color={colors.textPrimary} />
         </Pressable>
@@ -418,7 +398,6 @@ export default function Wishlist() {
                 item={item}
                 colors={colors}
                 styles={styles}
-                onAddToCart={() => notImplemented("Add to Cart")}
                 onOpenAddToList={() => setAddToListProductId(item.id)}
                 onPress={() => openProductDetails(item.id)}
               />
@@ -448,7 +427,7 @@ export default function Wishlist() {
                   params: { listId: item.id },
                 })
               }
-              onDelete={() => handleDeleteList(item.id, item.name)}
+              onDelete={() => setPendingDeleteList(item)}
             />
           )}
         />
@@ -572,8 +551,6 @@ export default function Wishlist() {
               );
             })}
 
-            {/* Carries the current product through to the create-list flow,
-                so the new list starts with that product already in it. */}
             <Pressable
               style={styles.pickerNewListButton}
               onPress={() => {
@@ -585,6 +562,56 @@ export default function Wishlist() {
               <Ionicons name="add" size={18} color={colors.accent} />
               <Text style={styles.pickerNewListText}>Create new list</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- Delete list confirmation sheet --- */}
+      <Modal
+        transparent
+        visible={!!pendingDeleteList}
+        animationType="slide"
+        onRequestClose={() => setPendingDeleteList(null)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <View style={styles.deleteSheetCard}>
+            <Text style={styles.deleteSheetTitle}>Delete List?</Text>
+            <View style={styles.deleteSheetDivider} />
+
+            {pendingDeleteList && (
+              <View style={styles.deleteSheetListRow}>
+                <View style={styles.deleteSheetIconCircle}>
+                  <Ionicons name="albums" size={18} color={colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.deleteSheetListName}>
+                    {pendingDeleteList.name}
+                  </Text>
+                  <Text style={styles.deleteSheetListCount}>
+                    {pendingDeleteList.productIds.length} items
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <Text style={styles.deleteSheetWarning}>
+              This won&apos;t remove the items from your wishlist.
+            </Text>
+
+            <View style={styles.deleteSheetActionsRow}>
+              <Pressable
+                style={styles.deleteSheetCancelButton}
+                onPress={() => setPendingDeleteList(null)}
+              >
+                <Text style={styles.deleteSheetCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.deleteSheetConfirmButton}
+                onPress={confirmDeleteList}
+              >
+                <Text style={styles.deleteSheetConfirmText}>Yes, Delete</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -755,17 +782,8 @@ function getStyles(colors: ThemeColors) {
       flexDirection: "row",
       gap: 8,
     },
-    addToCartButton: {
+    addToCartButtonFlex: {
       flex: 1,
-      backgroundColor: colors.accent,
-      borderRadius: 20,
-      paddingVertical: 10,
-      alignItems: "center",
-    },
-    addToCartText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 13,
-      color: colors.onAccent,
     },
     addToListButton: {
       width: 40,
@@ -962,6 +980,93 @@ function getStyles(colors: ThemeColors) {
       fontFamily: Fonts.semiBold,
       fontSize: 14,
       color: colors.accent,
+    },
+
+    // --- Delete list confirmation sheet ---
+    deleteSheetCard: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 24,
+      paddingTop: 20,
+      paddingBottom: 50,
+    },
+    deleteSheetTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+      textAlign: "center",
+      marginBottom: 16,
+    },
+    deleteSheetDivider: {
+      height: 1,
+      backgroundColor: colors.outline,
+      marginBottom: 16,
+    },
+    deleteSheetListRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 16,
+    },
+    deleteSheetIconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    deleteSheetListName: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.textPrimary,
+      marginBottom: 2,
+    },
+    deleteSheetListCount: {
+      fontFamily: Fonts.regular,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    deleteSheetWarning: {
+      fontFamily: Fonts.regular,
+      fontSize: 13,
+      color: colors.textMuted,
+      textAlign: "center",
+      marginBottom: 20,
+    },
+    deleteSheetActionsRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    deleteSheetCancelButton: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.cardBackground,
+      borderRadius: 28,
+      paddingVertical: 16,
+    },
+    deleteSheetCancelText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    deleteSheetConfirmButton: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 16,
+    },
+    deleteSheetConfirmText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.onAccent,
     },
   });
 }

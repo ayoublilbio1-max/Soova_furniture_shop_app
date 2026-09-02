@@ -1,17 +1,17 @@
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useProfileStore } from "@/store/profile-store";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    FlatList,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 type CityOption = {
@@ -19,30 +19,53 @@ type CityOption = {
   region: string;
 };
 
+// Demo location list — key cities across USA, Canada, Europe, UK, and New Zealand.
 const DEMO_CITIES: CityOption[] = [
-  { city: "Casablanca, Morocco", region: "Maarif, Casablanca, Morocco" },
-  { city: "Fes, Morocco", region: "Fes-Meknes, Morocco" },
-  { city: "Marrakech, Morocco", region: "Marrakech-Safi, Morocco" },
-  { city: "Rabat, Morocco", region: "Rabat-Sale-Kenitra, Morocco" },
+  // USA
   { city: "New York, USA", region: "New York, United States" },
+  { city: "Los Angeles, USA", region: "California, United States" },
+  { city: "Chicago, USA", region: "Illinois, United States" },
+  { city: "Miami, USA", region: "Florida, United States" },
+  { city: "San Francisco, USA", region: "California, United States" },
+  { city: "Houston, USA", region: "Texas, United States" },
+  // Canada
+  { city: "Toronto, Canada", region: "Ontario, Canada" },
+  { city: "Vancouver, Canada", region: "British Columbia, Canada" },
+  { city: "Montreal, Canada", region: "Quebec, Canada" },
+  // Europe
   { city: "Paris, France", region: "Ile-de-France, France" },
+  { city: "Berlin, Germany", region: "Berlin, Germany" },
+  { city: "Rome, Italy", region: "Lazio, Italy" },
+  { city: "Madrid, Spain", region: "Madrid, Spain" },
+  { city: "Amsterdam, Netherlands", region: "North Holland, Netherlands" },
+  // UK
+  { city: "London, UK", region: "England, United Kingdom" },
+  { city: "Manchester, UK", region: "England, United Kingdom" },
+  { city: "Edinburgh, UK", region: "Scotland, United Kingdom" },
+  // New Zealand
+  { city: "Auckland, New Zealand", region: "Auckland, New Zealand" },
+  { city: "Wellington, New Zealand", region: "Wellington, New Zealand" },
 ];
+
+const DEFAULT_RECENT: CityOption = {
+  city: "New York, USA",
+  region: "New York, United States",
+};
 
 export default function LocationSearch() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
-  const params = useLocalSearchParams<{ selected?: string }>();
+  const params = useLocalSearchParams<{
+    selected?: string;
+    returnTo?: string;
+  }>();
+  const setProfile = useProfileStore((s) => s.setProfile);
 
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<CityOption[]>(
     params.selected
       ? [{ city: params.selected, region: params.selected }]
-      : [
-          {
-            city: "Casablanca, Morocco",
-            region: "Maarif, Casablanca, Morocco",
-          },
-        ],
+      : [DEFAULT_RECENT],
   );
 
   const results = query
@@ -51,12 +74,21 @@ export default function LocationSearch() {
       )
     : recent;
 
-function selectCity(option: CityOption) {
-  router.replace({
-    pathname: "/(tabs)/home",
-    params: { location: option.city },
-  });
-}
+  const showNotFound = query.trim().length > 0 && results.length === 0;
+
+  function selectCity(option: CityOption) {
+    setProfile({ location: option.city });
+
+    if (params.returnTo === "edit-profile") {
+      router.replace("/edit-profile");
+      return;
+    }
+
+    router.replace({
+      pathname: "/(tabs)/home",
+      params: { location: option.city },
+    });
+  }
 
   function removeRecent(city: string) {
     setRecent((prev) => prev.filter((item) => item.city !== city));
@@ -90,7 +122,12 @@ function selectCity(option: CityOption) {
 
       <Pressable
         style={styles.currentLocationRow}
-        onPress={() => router.push("/location-access")}
+        onPress={() =>
+          router.push({
+            pathname: "/location-access",
+            params: params.returnTo ? { returnTo: params.returnTo } : {},
+          })
+        }
       >
         <Ionicons name="navigate" size={20} color={colors.accent} />
         <Text style={styles.currentLocationText}>Use My Current Location</Text>
@@ -100,29 +137,44 @@ function selectCity(option: CityOption) {
         <Text style={styles.sectionLabel}>RECENT SEARCHES</Text>
       )}
 
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.city}
-        renderItem={({ item }) => (
-          <View style={styles.resultRow}>
-            <Pressable
-              style={styles.resultInfo}
-              onPress={() => selectCity(item)}
-            >
-              <Ionicons name="location" size={20} color={colors.accent} />
-              <View>
-                <Text style={styles.resultCity}>{item.city}</Text>
-                <Text style={styles.resultRegion}>{item.region}</Text>
-              </View>
-            </Pressable>
-            {!query && (
-              <Pressable onPress={() => removeRecent(item.city)}>
-                <Ionicons name="close" size={18} color={colors.textMuted} />
+      {showNotFound ? (
+        <View style={styles.notFoundBox}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={22}
+            color={colors.textMuted}
+          />
+          <Text style={styles.notFoundTitle}>Location not available</Text>
+          <Text style={styles.notFoundText}>
+            This is a demo — only a limited set of cities are searchable. Try
+            New York, London, Paris, or Toronto.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.city}
+          renderItem={({ item }) => (
+            <View style={styles.resultRow}>
+              <Pressable
+                style={styles.resultInfo}
+                onPress={() => selectCity(item)}
+              >
+                <Ionicons name="location" size={20} color={colors.accent} />
+                <View>
+                  <Text style={styles.resultCity}>{item.city}</Text>
+                  <Text style={styles.resultRegion}>{item.region}</Text>
+                </View>
               </Pressable>
-            )}
-          </View>
-        )}
-      />
+              {!query && (
+                <Pressable onPress={() => removeRecent(item.city)}>
+                  <Ionicons name="close" size={18} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </View>
+          )}
+        />
+      )}
     </View>
   );
 }
@@ -215,6 +267,25 @@ function getStyles(colors: ThemeColors) {
       fontFamily: Fonts.regular,
       fontSize: 13,
       color: colors.textMuted,
+    },
+    notFoundBox: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingTop: 40,
+      paddingHorizontal: 20,
+      gap: 8,
+    },
+    notFoundTitle: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    notFoundText: {
+      fontFamily: Fonts.regular,
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.textMuted,
+      textAlign: "center",
     },
   });
 }

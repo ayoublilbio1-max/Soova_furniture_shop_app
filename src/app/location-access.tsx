@@ -1,9 +1,10 @@
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useProfileStore } from "@/store/profile-store";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -18,6 +19,8 @@ export default function LocationAccess() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
   const [loading, setLoading] = useState(false);
+  const params = useLocalSearchParams<{ returnTo?: string }>();
+  const setProfile = useProfileStore((s) => s.setProfile);
 
   async function handleAllowAccess() {
     setLoading(true);
@@ -50,10 +53,16 @@ export default function LocationAccess() {
         // generic label rather than blocking the user.
       }
 
-      router.replace({
-        pathname: "/(tabs)/home",
-        params: { location: label },
-      });
+      setProfile({ location: label });
+
+      if (params.returnTo === "edit-profile") {
+        router.replace("/edit-profile");
+      } else {
+        router.replace({
+          pathname: "/(tabs)/home",
+          params: { location: label },
+        });
+      }
     } catch {
       Alert.alert(
         "Couldn't get your location",
@@ -93,7 +102,14 @@ export default function LocationAccess() {
         )}
       </Pressable>
 
-      <Pressable onPress={() => router.push("/location-search")}>
+      <Pressable
+        onPress={() =>
+          router.push({
+            pathname: "/location-search",
+            params: params.returnTo ? { returnTo: params.returnTo } : {},
+          })
+        }
+      >
         <Text style={styles.manualLink}>Enter Location Manually</Text>
       </Pressable>
     </View>
