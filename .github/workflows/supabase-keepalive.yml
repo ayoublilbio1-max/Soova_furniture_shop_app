@@ -1,0 +1,22 @@
+name: Supabase Keepalive
+
+# Supabase's free tier pauses a project after 7 days with no database
+# activity. This pings the REST API every 4 days — comfortably inside
+# that window with margin for GitHub's scheduler occasionally running a
+# few minutes late — so the project never goes to sleep.
+
+on:
+  schedule:
+    - cron: "0 9 */4 * *" # 09:00 UTC, every 4 days
+  workflow_dispatch: {} # lets you trigger it manually from the Actions tab to test
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST endpoint
+        run: |
+          curl -s -o /dev/null -w "Supabase responded with HTTP %{http_code}\n" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
