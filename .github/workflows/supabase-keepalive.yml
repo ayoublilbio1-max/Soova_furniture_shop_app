@@ -12,5 +12,5 @@ jobs:
       - name: Ping Supabase REST endpoint
         run: |
           curl -s -o /dev/null -w "Supabase responded with HTTP %{http_code}\n" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/keepalive_ping?select=*&limit=1" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
