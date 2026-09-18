@@ -13,6 +13,11 @@
 // carries its own pre-computed totals rather than being recomputed by the
 // screens that display it, so Review Summary / E-Receipt can never end up
 // showing stale or empty numbers regardless of render timing.
+//
+// orders is the full order history (My Orders screen) — every completed
+// order is appended here too, newest first, and never cleared. It's a
+// separate array from lastOrder so History and the immediate post-purchase
+// screens can't interfere with each other.
 
 import { CODE_COUPONS, SPECIAL_COUPONS } from "@/data/coupons";
 import { products } from "@/data/products";
@@ -136,6 +141,19 @@ const SEED_ADDRESSES: ShippingAddress[] = [
   },
 ];
 
+// --- Demo saved card, so Payment Methods has something selectable out of
+// the box during testing — no need to go through Add Card every time.
+// Only the fields a real saved card would ever have (no full number/CVV).
+const SEED_SAVED_CARDS: SavedCard[] = [
+  {
+    id: "card-demo-mastercard",
+    holderName: "John Doe",
+    lastFour: "4444",
+    expiry: "12/29",
+    brand: "mastercard",
+  },
+];
+
 // --- Sum of collected special-offer discounts that are actually eligible
 // given the current subtotal (each has its own minOrder threshold). ---
 function eligibleSpecialDiscount(
@@ -143,8 +161,7 @@ function eligibleSpecialDiscount(
   collectedSpecialOfferIds: string[],
 ) {
   return SPECIAL_COUPONS.filter(
-    (c) =>
-      collectedSpecialOfferIds.includes(c.id) && subTotal >= c.minOrder,
+    (c) => collectedSpecialOfferIds.includes(c.id) && subTotal >= c.minOrder,
   ).reduce((sum, c) => sum + c.amountOff, 0);
 }
 
@@ -158,6 +175,7 @@ type CartState = {
   appliedPromo: PromoCode | null;
   collectedSpecialOfferIds: string[];
   lastOrder: CompletedOrder | null;
+  orders: CompletedOrder[];
   hasHydrated: boolean;
 
   setHasHydrated: (value: boolean) => void;
@@ -180,6 +198,7 @@ type CartState = {
   collectSpecialOffer: (couponId: string) => void;
 
   placeOrder: () => string;
+  resetStore: () => void;
 };
 
 export const useCartStore = create<CartState>()(
@@ -189,20 +208,19 @@ export const useCartStore = create<CartState>()(
       addresses: SEED_ADDRESSES,
       selectedAddressId: SEED_ADDRESSES[0].id,
       selectedShippingTypeId: "economy",
-      savedCards: [],
+      savedCards: SEED_SAVED_CARDS,
       selectedPaymentMethod: "cash",
       appliedPromo: null,
       collectedSpecialOfferIds: [],
       lastOrder: null,
+      orders: [],
       hasHydrated: false,
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       addToCart: (productId, quantity = 1) =>
         set((state) => {
-          const existing = state.items.find(
-            (i) => i.productId === productId,
-          );
+          const existing = state.items.find((i) => i.productId === productId);
 
           if (existing) {
             return {
@@ -228,17 +246,13 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           if (quantity < 1) {
             return {
-              items: state.items.filter(
-                (i) => i.productId !== productId,
-              ),
+              items: state.items.filter((i) => i.productId !== productId),
             };
           }
 
           return {
             items: state.items.map((i) =>
-              i.productId === productId
-                ? { ...i, quantity }
-                : i,
+              i.productId === productId ? { ...i, quantity } : i,
             ),
           };
         }),
@@ -261,9 +275,7 @@ export const useCartStore = create<CartState>()(
 
       deleteAddress: (addressId) =>
         set((state) => {
-          const remaining = state.addresses.filter(
-            (a) => a.id !== addressId,
-          );
+          const remaining = state.addresses.filter((a) => a.id !== addressId);
 
           const selectedAddressId =
             state.selectedAddressId === addressId
@@ -305,9 +317,7 @@ export const useCartStore = create<CartState>()(
 
       removeCard: (cardId) =>
         set((state) => ({
-          savedCards: state.savedCards.filter(
-            (c) => c.id !== cardId,
-          ),
+          savedCards: state.savedCards.filter((c) => c.id !== cardId),
           selectedPaymentMethod:
             state.selectedPaymentMethod === `card:${cardId}`
               ? "cash"
@@ -321,9 +331,7 @@ export const useCartStore = create<CartState>()(
 
       applyPromo: (code) => {
         const match = PROMO_CODES.find(
-          (p) =>
-            p.code.toLowerCase() ===
-            code.trim().toLowerCase(),
+          (p) => p.code.toLowerCase() === code.trim().toLowerCase(),
         );
 
         if (!match) return false;
@@ -360,22 +368,16 @@ export const useCartStore = create<CartState>()(
         // to avoid a circular import — cart-helpers itself reads from this
         // store. Duplicated math, but it's small and self-contained.
         const subTotal = state.items.reduce((sum, item) => {
-          const product = products.find(
-            (p) => p.id === item.productId,
-          );
+          const product = products.find((p) => p.id === item.productId);
 
           return sum + (product ? product.price * item.quantity : 0);
         }, 0);
 
         const shippingType =
-          SHIPPING_TYPES.find(
-            (t) => t.id === state.selectedShippingTypeId,
-          ) ?? SHIPPING_TYPES[0];
+          SHIPPING_TYPES.find((t) => t.id === state.selectedShippingTypeId) ??
+          SHIPPING_TYPES[0];
 
-        const deliveryFee =
-          state.items.length > 0
-            ? shippingType.fee
-            : 0;
+        const deliveryFee = state.items.length > 0 ? shippingType.fee : 0;
 
         const tax = subTotal * TAX_RATE;
 
@@ -388,16 +390,9 @@ export const useCartStore = create<CartState>()(
           state.collectedSpecialOfferIds,
         );
 
-        const discount = Math.min(
-          promoDiscount + specialDiscount,
-          subTotal,
-        );
+        const discount = Math.min(promoDiscount + specialDiscount, subTotal);
 
-        const total =
-          subTotal +
-          deliveryFee +
-          tax -
-          discount;
+        const total = subTotal + deliveryFee + tax - discount;
 
         const order: CompletedOrder = {
           id: orderId,
@@ -417,8 +412,11 @@ export const useCartStore = create<CartState>()(
         };
 
         // Both discount sources are consumed once an order is placed.
+        // orders is prepended (newest first) and never cleared, separate
+        // from lastOrder which is just the immediate post-purchase snapshot.
         set({
           lastOrder: order,
+          orders: [order, ...state.orders],
           items: [],
           appliedPromo: null,
           collectedSpecialOfferIds: [],
@@ -426,6 +424,25 @@ export const useCartStore = create<CartState>()(
 
         return orderId;
       },
+
+      // --- Used by Settings > "Reset Demo Data". Wipes cart, orders,
+      // saved cards, and promo state back to a fresh-install baseline.
+      // Addresses reset to the seed list rather than being emptied, since
+      // an address book with zero entries isn't a meaningful "fresh" state
+      // for this app (Checkout always expects one to be selectable).
+      resetStore: () =>
+        set({
+          items: [],
+          addresses: SEED_ADDRESSES,
+          selectedAddressId: SEED_ADDRESSES[0].id,
+          selectedShippingTypeId: "economy",
+          savedCards: SEED_SAVED_CARDS,
+          selectedPaymentMethod: "cash",
+          appliedPromo: null,
+          collectedSpecialOfferIds: [],
+          lastOrder: null,
+          orders: [],
+        }),
     }),
     {
       name: "soova-cart",
@@ -439,9 +456,9 @@ export const useCartStore = create<CartState>()(
         savedCards: state.savedCards,
         selectedPaymentMethod: state.selectedPaymentMethod,
         appliedPromo: state.appliedPromo,
-        collectedSpecialOfferIds:
-          state.collectedSpecialOfferIds,
+        collectedSpecialOfferIds: state.collectedSpecialOfferIds,
         lastOrder: state.lastOrder,
+        orders: state.orders,
       }),
 
       onRehydrateStorage: () => (state) => {

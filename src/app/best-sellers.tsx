@@ -1,6 +1,8 @@
 // Best Sellers screen — reached from Home's "See All" next to Best Sellers.
 // Category filter chips show real per-category counts (sofa subtypes grouped
 // together); every card here shows the "Best Seller" badge unconditionally.
+// Chips show a brief loading spinner before switching category (color-fade
+// animation between active/inactive states is unchanged).
 
 import { AddToCartButton } from "@/components/ui/add-to-cart-button";
 import { ProductGridSkeleton } from "@/components/ui/product-grid-skeleton";
@@ -18,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Easing,
   FlatList,
@@ -32,10 +35,14 @@ const WISHLIST_ACTIVE_COLOR = "#DC143C";
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // --- Category filter chip (All + one per category, with live counts) ---
+// Background/text color fade is unchanged; a loading spinner now replaces
+// the label briefly before the category switch is applied.
 function CategoryFilterChip({
   label,
   count,
   active,
+  loading,
+  disabled,
   colors,
   styles,
   onPress,
@@ -43,6 +50,8 @@ function CategoryFilterChip({
   label: string;
   count: number;
   active: boolean;
+  loading: boolean;
+  disabled: boolean;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
   onPress: () => void;
@@ -70,20 +79,28 @@ function CategoryFilterChip({
         },
       ]}
       onPress={onPress}
+      disabled={disabled}
     >
-      <Animated.Text
-        style={[
-          styles.categoryChipText,
-          {
-            color: colorAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [colors.textPrimary, colors.onAccent],
-            }),
-          },
-        ]}
-      >
-        {label} ({count})
-      </Animated.Text>
+      {loading ? (
+        <ActivityIndicator
+          color={active ? colors.onAccent : colors.textPrimary}
+          size="small"
+        />
+      ) : (
+        <Animated.Text
+          style={[
+            styles.categoryChipText,
+            {
+              color: colorAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [colors.textPrimary, colors.onAccent],
+              }),
+            },
+          ]}
+        >
+          {label} ({count})
+        </Animated.Text>
+      )}
     </AnimatedPressable>
   );
 }
@@ -201,6 +218,10 @@ export default function BestSellers() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [categoryTransitioning, setCategoryTransitioning] = useState(false);
 
+  // --- Tracks which chip (by key: "all" or category id) is mid-press,
+  // so it can show a spinner while every chip is briefly disabled ---
+  const [loadingChipKey, setLoadingChipKey] = useState<string | null>(null);
+
   const sorted = useMemo(
     () => [...products].sort((a, b) => b.salesCount - a.salesCount),
     [],
@@ -232,9 +253,15 @@ export default function BestSellers() {
     return () => task.cancel();
   }, [activeCategory]);
 
-  function handleCategoryPress(id: string | null) {
-    setCategoryTransitioning(true);
-    setActiveCategory(id);
+  function handleCategoryPress(key: string, id: string | null) {
+    if (loadingChipKey) return;
+    setLoadingChipKey(key);
+
+    setTimeout(() => {
+      setCategoryTransitioning(true);
+      setActiveCategory(id);
+      setLoadingChipKey(null);
+    }, 400);
   }
 
   function openProductDetails(id: string) {
@@ -284,16 +311,21 @@ export default function BestSellers() {
         contentContainerStyle={styles.categoryChipsRow}
         data={[{ id: null, name: "All" }, ...categories]}
         keyExtractor={(item) => item.id ?? "all"}
-        renderItem={({ item }) => (
-          <CategoryFilterChip
-            label={item.name}
-            count={item.id ? (categoryCounts[item.id] ?? 0) : products.length}
-            active={activeCategory === item.id}
-            colors={colors}
-            styles={styles}
-            onPress={() => handleCategoryPress(item.id)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const key = item.id ?? "all";
+          return (
+            <CategoryFilterChip
+              label={item.name}
+              count={item.id ? (categoryCounts[item.id] ?? 0) : products.length}
+              active={activeCategory === item.id}
+              loading={loadingChipKey === key}
+              disabled={!!loadingChipKey}
+              colors={colors}
+              styles={styles}
+              onPress={() => handleCategoryPress(key, item.id)}
+            />
+          );
+        }}
       />
 
       {/* --- Product grid --- */}
@@ -371,6 +403,7 @@ function getStyles(colors: ThemeColors) {
       justifyContent: "center",
       paddingHorizontal: 16,
       height: 30,
+      minWidth: 30,
     },
     categoryChipText: {
       fontFamily: Fonts.medium,

@@ -1,6 +1,7 @@
 // Account tab — Profile screen featuring a themed empty avatar circle with an edit badge,
 // device photo selection via expo-image-picker, navigation links, and logout sheet.
 
+import { AccountSkeleton } from "@/components/ui/account-skeleton";
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
@@ -30,16 +31,6 @@ type MenuItem = {
   isDestructive?: boolean;
 };
 
-// Menu items whose screens aren't built yet — tapping these opens the
-// "Coming Soon" sheet instead of navigating to a dead route.
-const NOT_YET_BUILT = new Set([
-  "orders",
-  "coupons",
-  "settings",
-  "help",
-  "privacy",
-]);
-
 export default function Account() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
@@ -48,10 +39,9 @@ export default function Account() {
   const profileName = useProfileStore((s) => s.name);
   const profileAvatarUri = useProfileStore((s) => s.avatarUri);
   const setProfile = useProfileStore((s) => s.setProfile);
+  const setOnboardingComplete = useProfileStore((s) => s.setOnboardingComplete);
 
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
-  const [comingSoonVisible, setComingSoonVisible] = useState(false);
-  const [comingSoonTitle, setComingSoonTitle] = useState("");
 
   const menuItems: MenuItem[] = [
     {
@@ -70,32 +60,37 @@ export default function Account() {
       id: "payment",
       title: "Payment Methods",
       icon: "card-outline",
-      route: "/payment-methods",
+      route: "/payment-methods?mode=manage",
     },
     {
       id: "orders",
       title: "My Orders",
       icon: "receipt-outline",
+      route: "/orders",
     },
     {
       id: "coupons",
       title: "My Coupons",
       icon: "pricetag-outline",
+      route: "/coupons",
     },
     {
       id: "settings",
       title: "Settings",
       icon: "settings-outline",
+      route: "/settings",
     },
     {
       id: "help",
       title: "Help Center",
       icon: "help-circle-outline",
+      route: "/help",
     },
     {
       id: "privacy",
       title: "Privacy Policy",
       icon: "shield-checkmark-outline",
+      route: "/privacy",
     },
     {
       id: "logout",
@@ -134,11 +129,6 @@ export default function Account() {
       item.action();
       return;
     }
-    if (NOT_YET_BUILT.has(item.id)) {
-      setComingSoonTitle(item.title);
-      setComingSoonVisible(true);
-      return;
-    }
     if (item.route) {
       router.push(item.route as any);
     }
@@ -146,11 +136,18 @@ export default function Account() {
 
   function handleLogout() {
     setLogoutModalVisible(false);
+    // Marks onboarding as not-done, so a future cold start shows
+    // Welcome/Sign In again instead of jumping straight back to Home.
+    setOnboardingComplete(false);
     router.replace("/sign-in" as any);
   }
 
   if (!ready) {
-    return <View style={styles.screen} />;
+    return (
+      <View style={styles.screen}>
+        <AccountSkeleton />
+      </View>
+    );
   }
 
   return (
@@ -259,40 +256,6 @@ export default function Account() {
           </View>
         </View>
       </Modal>
-
-      {/* Coming Soon Modal — matches app's demo-limitation modal style */}
-      <Modal
-        transparent
-        visible={comingSoonVisible}
-        animationType="fade"
-        onRequestClose={() => setComingSoonVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <Pressable
-            style={styles.modalBackdropTap}
-            onPress={() => setComingSoonVisible(false)}
-          />
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonIconCircle}>
-              <Ionicons
-                name="construct-outline"
-                size={28}
-                color={colors.accent}
-              />
-            </View>
-            <Text style={styles.comingSoonTitle}>{comingSoonTitle}</Text>
-            <Text style={styles.comingSoonBody}>
-              This section is still being built. Check back soon!
-            </Text>
-            <Pressable
-              style={styles.gotItButton}
-              onPress={() => setComingSoonVisible(false)}
-            >
-              <Text style={styles.gotItButtonText}>Got It</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -397,7 +360,7 @@ function getStyles(colors: ThemeColors) {
       borderTopRightRadius: 28,
       paddingHorizontal: 24,
       paddingTop: 12,
-      paddingBottom: 40,
+      paddingBottom: 48,
       alignItems: "center",
     },
     sheetHandle: {
@@ -454,50 +417,6 @@ function getStyles(colors: ThemeColors) {
       paddingVertical: 14,
     },
     logoutButtonText: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 15,
-      color: colors.onAccent,
-    },
-    comingSoonCard: {
-      backgroundColor: colors.background,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-      paddingHorizontal: 24,
-      paddingTop: 32,
-      paddingBottom: 40,
-      alignItems: "center",
-    },
-    comingSoonIconCircle: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: colors.cardBackground,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 16,
-    },
-    comingSoonTitle: {
-      fontFamily: Fonts.bold,
-      fontSize: 18,
-      color: colors.textPrimary,
-      marginBottom: 8,
-    },
-    comingSoonBody: {
-      fontFamily: Fonts.medium,
-      fontSize: 14,
-      color: colors.textMuted,
-      textAlign: "center",
-      marginBottom: 28,
-    },
-    gotItButton: {
-      width: "100%",
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.accent,
-      borderRadius: 28,
-      paddingVertical: 14,
-    },
-    gotItButtonText: {
       fontFamily: Fonts.semiBold,
       fontSize: 15,
       color: colors.onAccent,

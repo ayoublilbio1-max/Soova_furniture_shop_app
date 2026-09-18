@@ -7,6 +7,11 @@
 // The barcode is a deterministic bar pattern seeded from the order id —
 // not a real scannable barcode (no barcode library or real backend behind
 // it), just a visual match for the reference design.
+//
+// Cash on Delivery orders haven't actually been paid yet, so this screen
+// (and the generated PDF) swap "E-Receipt"/"Total" for "Order Summary"/
+// "Amount Due", and show a pay-on-delivery note instead of implying money
+// already changed hands.
 
 import { CartSkeleton } from "@/components/ui/cart-skeleton";
 import { RemoteImage } from "@/components/ui/remote-image";
@@ -31,6 +36,24 @@ import {
   Text,
   View,
 } from "react-native";
+
+function formatPaymentMethod(
+  method: string,
+  savedCards: { id: string; lastFour: string }[],
+) {
+  if (method === "cash") return "Cash On Delivery";
+  if (method === "paypal") return "PayPal";
+  if (method === "apple-pay") return "Apple Pay";
+  if (method === "google-pay") return "Google Pay";
+
+  if (method.startsWith("card:")) {
+    const cardId = method.slice("card:".length);
+    const card = savedCards.find((c) => c.id === cardId);
+    return card ? `Card •••• ${card.lastFour}` : "Card";
+  }
+
+  return method;
+}
 
 function getCategoryLabel(categoryId: string) {
   const match = categories.find((c) => c.id === categoryId);
@@ -116,9 +139,13 @@ export default function EReceipt() {
 
   const lastOrder = useCartStore((s) => s.lastOrder);
   const addresses = useCartStore((s) => s.addresses);
+  const savedCards = useCartStore((s) => s.savedCards);
   const hasHydrated = useCartStore((s) => s.hasHydrated);
 
   const [isDownloading, setIsDownloading] = useState(false);
+
+  const isCashOnDelivery = lastOrder?.paymentMethod === "cash";
+  const screenTitle = isCashOnDelivery ? "Order Summary" : "E-Receipt";
 
   const lines = useMemo(
     () => (lastOrder ? buildCartLines(lastOrder.items) : []),
@@ -131,6 +158,9 @@ export default function EReceipt() {
   const address = lastOrder
     ? addresses.find((a) => a.id === lastOrder.addressId)
     : undefined;
+  const paymentMethodLabel = lastOrder
+    ? formatPaymentMethod(lastOrder.paymentMethod, savedCards)
+    : null;
 
   // --- Builds the printable HTML for this order. Kept plain/inline-styled
   // since expo-print renders through a basic HTML engine, not a full
@@ -159,12 +189,21 @@ export default function EReceipt() {
       ? `${address.street} ${address.city}, ${address.state} ${address.zip}`
       : "—";
 
+    const pdfTitle = isCashOnDelivery
+      ? "Soova — Order Summary"
+      : "Soova — E-Receipt";
+
     return `
       <html>
         <head><meta charset="utf-8" /></head>
         <body style="font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #2B1D14;">
-          <h1 style="font-size: 20px; margin-bottom: 4px;">Soova — E-Receipt</h1>
+          <h1 style="font-size: 20px; margin-bottom: 4px;">${pdfTitle}</h1>
           <p style="color:#888; font-size: 12px; margin-top: 0;">Order ${lastOrder.id}</p>
+          ${
+            isCashOnDelivery
+              ? `<p style="background:#FDF3E7; padding:10px 14px; border-radius:8px; font-size:13px; margin:16px 0;">Payment due on delivery — pay in cash when your order arrives.</p>`
+              : ""
+          }
 
           <table style="width:100%; border-collapse: collapse; margin: 20px 0;">
             <thead>
@@ -186,6 +225,10 @@ export default function EReceipt() {
             <tr><td style="color:#888;">Promo Code</td><td style="text-align:right;">${
               lastOrder.promo ? lastOrder.promo.code : "—"
             }</td></tr>
+            <tr><td style="color:#888;">Payment Method</td><td style="text-align:right;">${formatPaymentMethod(
+              lastOrder.paymentMethod,
+              savedCards,
+            )}</td></tr>
           </table>
 
           <table style="width:100%; font-size: 14px;">
@@ -206,7 +249,9 @@ export default function EReceipt() {
                 : ""
             }
             <tr style="border-top: 1px solid #ddd;">
-              <td style="padding-top:10px; font-weight:bold;">Total</td>
+              <td style="padding-top:10px; font-weight:bold;">${
+                isCashOnDelivery ? "Amount Due" : "Total"
+              }</td>
               <td style="padding-top:10px; text-align:right; font-weight:bold;">$${totals.total.toFixed(
                 2,
               )}</td>
@@ -228,7 +273,7 @@ export default function EReceipt() {
       if (canShare) {
         await Sharing.shareAsync(uri, {
           mimeType: "application/pdf",
-          dialogTitle: `Soova Receipt — ${lastOrder.id}`,
+          dialogTitle: `Soova ${isCashOnDelivery ? "Order Summary" : "Receipt"} — ${lastOrder.id}`,
           UTI: "com.adobe.pdf",
         });
       } else {
@@ -279,7 +324,7 @@ export default function EReceipt() {
         <Pressable style={s.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </Pressable>
-        <Text style={s.headerTitle}>E-Receipt</Text>
+        <Text style={s.headerTitle}>{screenTitle}</Text>
         <View style={s.backButton} />
       </View>
 
@@ -288,6 +333,15 @@ export default function EReceipt() {
           <Barcode orderId={lastOrder.id} colors={colors} />
         </View>
         <Text style={s.orderIdText}>{lastOrder.id}</Text>
+
+        {isCashOnDelivery && (
+          <View style={s.codBanner}>
+            <Ionicons name="cash-outline" size={18} color={colors.accent} />
+            <Text style={s.codBannerText}>
+              Payment due on delivery — pay in cash when your order arrives.
+            </Text>
+          </View>
+        )}
 
         {lines.map((line) => (
           <View key={line.product.id} style={s.itemRow}>
@@ -335,6 +389,10 @@ export default function EReceipt() {
             <Text style={s.detailLabel}>Delivery Type</Text>
             <Text style={s.detailValue}>{shippingType.name}</Text>
           </View>
+          <View style={s.detailRow}>
+            <Text style={s.detailLabel}>Payment Method</Text>
+            <Text style={s.detailValue}>{paymentMethodLabel}</Text>
+          </View>
         </View>
 
         <View style={s.totalsBlock}>
@@ -362,7 +420,9 @@ export default function EReceipt() {
           <View style={s.totalsDivider} />
 
           <View style={s.totalRow}>
-            <Text style={s.grandTotalLabel}>Total</Text>
+            <Text style={s.grandTotalLabel}>
+              {isCashOnDelivery ? "Amount Due" : "Total"}
+            </Text>
             <Text style={s.grandTotalValue}>${totals.total.toFixed(2)}</Text>
           </View>
         </View>
@@ -377,7 +437,11 @@ export default function EReceipt() {
           {isDownloading ? (
             <ActivityIndicator color={colors.onAccent} size="small" />
           ) : (
-            <Text style={s.downloadButtonText}>Download E-Receipt</Text>
+            <Text style={s.downloadButtonText}>
+              {isCashOnDelivery
+                ? "Download Order Summary"
+                : "Download E-Receipt"}
+            </Text>
           )}
         </Pressable>
 
@@ -436,6 +500,22 @@ function getStyles(colors: ThemeColors) {
       color: colors.textMuted,
       textAlign: "center",
       marginBottom: 24,
+    },
+    codBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 20,
+    },
+    codBannerText: {
+      flex: 1,
+      fontFamily: Fonts.medium,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.textPrimary,
     },
 
     itemRow: {

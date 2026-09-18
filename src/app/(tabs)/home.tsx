@@ -13,15 +13,19 @@ import { bestSellerIds } from "@/data/product-badges";
 import { Product, products } from "@/data/products";
 import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import {
+  rescheduleReminderNotifications,
+  sendAppOpenReminders,
+} from "@/lib/notification-scheduler";
+import { useCartStore } from "@/store/cart-store";
 import { useProfileStore } from "@/store/profile-store";
 import { useWishlistStore } from "@/store/wishlist-store";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   Animated,
-  Easing,
   InteractionManager,
   Pressable,
   ScrollView,
@@ -35,7 +39,6 @@ const FILTERS = ["All", "Newest", "Popular"];
 const FLASH_SALE_SECONDS = 2 * 3600 + 12 * 60 + 56;
 const DEFAULT_LOCATION = "Casablanca, Morocco";
 const WISHLIST_ACTIVE_COLOR = "#DC143C";
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // Promo banner images live outside product data (they're editorial, not
 // product photos), so they carry their own explicit primary/fallback URLs.
@@ -146,7 +149,8 @@ function ProductCard({
   );
 }
 
-// --- "See All" text button with a small scale-pop on press ---
+// --- "See All" text button — brief loading spinner before navigating, no
+// press-scale animation ---
 function SeeAllButton({
   colors,
   styles,
@@ -156,39 +160,30 @@ function SeeAllButton({
   styles: ReturnType<typeof getStyles>;
   onPress: () => void;
 }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [loading, setLoading] = useState(false);
 
-  function handlePressIn() {
-    Animated.timing(scaleAnim, {
-      toValue: 0.9,
-      duration: 100,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handlePressOut() {
-    Animated.timing(scaleAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
+  function handlePress() {
+    if (loading) return;
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      onPress();
+    }, 400);
   }
 
   return (
-    <AnimatedPressable
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={{ transform: [{ scale: scaleAnim }] }}
-    >
-      <Text style={styles.seeAll}>See All</Text>
-    </AnimatedPressable>
+    <Pressable onPress={handlePress} disabled={loading}>
+      {loading ? (
+        <ActivityIndicator color={colors.accent} size="small" />
+      ) : (
+        <Text style={styles.seeAll}>See All</Text>
+      )}
+    </Pressable>
   );
 }
 
-// --- Single category shortcut (Sofa/Chair/Lamp/Cupboard) ---
+// --- Single category shortcut (Sofa/Chair/Lamp/Cupboard) — brief loading
+// spinner in place of the icon before navigating, no press-scale animation ---
 function CategoryItem({
   name,
   icon,
@@ -202,38 +197,32 @@ function CategoryItem({
   styles: ReturnType<typeof getStyles>;
   onPress: () => void;
 }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [loading, setLoading] = useState(false);
 
-  function handlePressIn() {
-    Animated.timing(scaleAnim, {
-      toValue: 0.9,
-      duration: 100,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handlePressOut() {
-    Animated.timing(scaleAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
+  function handlePress() {
+    if (loading) return;
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      onPress();
+    }, 400);
   }
 
   return (
-    <AnimatedPressable
-      style={[styles.categoryItem, { transform: [{ scale: scaleAnim }] }]}
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+    <Pressable
+      style={styles.categoryItem}
+      onPress={handlePress}
+      disabled={loading}
     >
       <View style={styles.categoryIconCircle}>
-        <MaterialCommunityIcons name={icon} size={26} color={colors.accent} />
+        {loading ? (
+          <ActivityIndicator color={colors.accent} size="small" />
+        ) : (
+          <MaterialCommunityIcons name={icon} size={26} color={colors.accent} />
+        )}
       </View>
       <Text style={styles.categoryLabel}>{name}</Text>
-    </AnimatedPressable>
+    </Pressable>
   );
 }
 
@@ -271,58 +260,50 @@ function BestSellerRow({
   );
 }
 
-// --- Free shipping promo row at the bottom of the screen ---
-function ShippingBanner({
+// --- Compact card for the New Arrivals horizontal row ---
+function NewArrivalCard({
+  item,
   colors,
   styles,
+  isWishlisted,
+  onToggleWishlist,
   onPress,
 }: {
+  item: Product;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
+  isWishlisted: boolean;
+  onToggleWishlist: (id: string) => void;
   onPress: () => void;
 }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  function handlePressIn() {
-    Animated.timing(scaleAnim, {
-      toValue: 0.97,
-      duration: 100,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handlePressOut() {
-    Animated.timing(scaleAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }
-
   return (
-    <AnimatedPressable
-      style={[styles.shippingBanner, { transform: [{ scale: scaleAnim }] }]}
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-    >
-      <View style={styles.shippingIconCircle}>
-        <MaterialCommunityIcons
-          name="truck-fast-outline"
-          size={22}
-          color="#88E788"
+    <Pressable style={styles.newArrivalCard} onPress={onPress}>
+      <View style={styles.newArrivalBadge}>
+        <Text style={styles.newArrivalBadgeText}>New</Text>
+      </View>
+      <RemoteImage
+        uri={item.thumbPath}
+        fallbackUri={item.fallbackThumbPath}
+        style={styles.newArrivalImage}
+      />
+      <Pressable
+        style={styles.newArrivalWishlistButton}
+        onPress={() => onToggleWishlist(item.id)}
+      >
+        <Ionicons
+          name={isWishlisted ? "heart" : "heart-outline"}
+          size={16}
+          color={isWishlisted ? WISHLIST_ACTIVE_COLOR : colors.accent}
         />
+      </Pressable>
+      <Text style={styles.newArrivalName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <View style={styles.newArrivalFooter}>
+        <Text style={styles.newArrivalPrice}>${item.price.toFixed(2)}</Text>
+        <AddToCartButton productId={item.id} colors={colors} size={28} />
       </View>
-      <View style={styles.shippingTextWrapper}>
-        <Text style={styles.shippingTitle}>Free Shipping</Text>
-        <Text style={styles.shippingSubtitle}>
-          Free shipping on all orders{"\n"}over $200
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-    </AnimatedPressable>
+    </Pressable>
   );
 }
 
@@ -342,9 +323,14 @@ export default function Home() {
   const wishlistedIds = useWishlistStore((s) => s.wishlistedIds);
   const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
 
+  // --- Cart items, read here only to drive the cart-reminder notification ---
+  const cartItems = useCartStore((s) => s.items);
+
   // --- Screen state ---
   const profileLocation = useProfileStore((s) => s.location);
   const profileAvatarUri = useProfileStore((s) => s.avatarUri);
+  const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
+  const setOnboardingComplete = useProfileStore((s) => s.setOnboardingComplete);
   const [location, setLocation] = useState(
     params.location ?? profileLocation ?? DEFAULT_LOCATION,
   );
@@ -352,13 +338,16 @@ export default function Home() {
   const [timeLeft, setTimeLeft] = useState(FLASH_SALE_SECONDS);
   const [hasUnread, setHasUnread] = useState(true);
   const [gridTransitioning, setGridTransitioning] = useState(false);
+  const [bellLoading, setBellLoading] = useState(false);
+  const [sortLoadingFilter, setSortLoadingFilter] = useState<string | null>(
+    null,
+  );
 
   // --- Animated values ---
   // Live scroll position for each paginated horizontal scroller, driving
   // the accent-colored progress bar thumbs directly (native-driven).
   const bannerScrollX = useRef(new Animated.Value(0)).current;
   const productScrollX = useRef(new Animated.Value(0)).current;
-  const bellScaleAnim = useRef(new Animated.Value(1)).current;
 
   // --- Location coming back from the location-search/location-access screens ---
   useEffect(() => {
@@ -366,6 +355,16 @@ export default function Home() {
       setLocation(params.location);
     }
   }, [params.location]);
+
+  // --- Reaching Home means onboarding (Welcome > Sign In/Up > Complete
+  // Profile > Location) is done. Marking it here — rather than in each
+  // onboarding screen — means any path that ends up at Home counts,
+  // without needing to touch those screens individually. ---
+  useEffect(() => {
+    if (!onboardingComplete) {
+      setOnboardingComplete(true);
+    }
+  }, [onboardingComplete]);
 
   // --- Flash sale countdown, ticks every second ---
   useEffect(() => {
@@ -424,34 +423,54 @@ export default function Home() {
     [],
   );
 
-  function notImplemented(label: string) {
-    Alert.alert(
-      label,
-      "This will continue once the corresponding screen is built.",
-    );
-  }
+  // --- Reminder notifications (cart / wishlist / best seller). One
+  // immediate notification per true condition fires once on app open;
+  // the every-2-hours background schedule (keeps firing even while the
+  // app is closed) is kept up to date whenever this state changes. See
+  // notification-scheduler.ts for details and limitations. ---
+  const wishlistCount = Object.values(wishlistedIds).filter(Boolean).length;
+  const reminderConditions = {
+    cartHasItems: cartItems.length > 0,
+    wishlistHasItems: wishlistCount > 0,
+    bestSellerName: bestSellers[0]?.name ?? null,
+  };
+
+  useEffect(() => {
+    // Runs once per app open (Home mount) only — intentionally not
+    // re-firing on every state change, or every cart edit would spam an
+    // immediate notification.
+    sendAppOpenReminders(reminderConditions);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    rescheduleReminderNotifications(reminderConditions);
+  }, [cartItems.length, wishlistedIds, bestSellers]);
+
+  // --- Newest products by createdAt, for the New Arrivals row ---
+  const newArrivals = useMemo(
+    () =>
+      [...products]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .slice(0, 8),
+    [],
+  );
 
   function openProductDetails(id: string) {
     router.push({ pathname: "/product-details", params: { id } });
   }
 
   function handleBellPress() {
-    Animated.sequence([
-      Animated.timing(bellScaleAnim, {
-        toValue: 1.2,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-      Animated.timing(bellScaleAnim, {
-        toValue: 1,
-        duration: 150,
-        easing: Easing.ease,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    setHasUnread(false);
-    router.push("/notifications");
+    if (bellLoading) return;
+    setBellLoading(true);
+    setTimeout(() => {
+      setHasUnread(false);
+      setBellLoading(false);
+      router.push("/notifications");
+    }, 400);
   }
 
   function handleCategoryPress(id: string, name: string) {
@@ -466,8 +485,13 @@ export default function Home() {
   }
 
   function handleSortPress(filter: string) {
-    setGridTransitioning(true);
-    setActiveFilter(filter);
+    if (sortLoadingFilter) return;
+    setSortLoadingFilter(filter);
+    setTimeout(() => {
+      setGridTransitioning(true);
+      setActiveFilter(filter);
+      setSortLoadingFilter(null);
+    }, 400);
   }
 
   if (!ready) {
@@ -501,20 +525,22 @@ export default function Home() {
               />
             </Pressable>
           </View>
-          <AnimatedPressable
-            style={[
-              styles.bellButton,
-              { transform: [{ scale: bellScaleAnim }] },
-            ]}
+          <Pressable
+            style={[styles.bellButton, bellLoading && styles.bellButtonBusy]}
             onPress={handleBellPress}
+            disabled={bellLoading}
           >
-            <Ionicons
-              name="notifications-outline"
-              size={22}
-              color={colors.textPrimary}
-            />
-            {hasUnread && <View style={styles.bellDot} />}
-          </AnimatedPressable>
+            {bellLoading ? (
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+            ) : (
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color={colors.textPrimary}
+              />
+            )}
+            {hasUnread && !bellLoading && <View style={styles.bellDot} />}
+          </Pressable>
         </View>
 
         {/* --- Search bar + profile avatar --- */}
@@ -565,13 +591,13 @@ export default function Home() {
                 />
                 <View style={styles.bannerOverlay} />
                 <View style={styles.bannerText}>
-                  <Text style={styles.bannerTitle}>New Collection</Text>
+                  <Text style={styles.bannerTitle}>Best Selling</Text>
                   <Text style={styles.bannerSubtitle}>
                     Discount 50% for{"\n"}the first transaction
                   </Text>
                   <Pressable
                     style={styles.bannerButton}
-                    onPress={() => notImplemented("Shop Now")}
+                    onPress={() => router.push("/best-sellers")}
                   >
                     <Text style={styles.bannerButtonText}>Shop Now</Text>
                   </Pressable>
@@ -646,15 +672,27 @@ export default function Home() {
                 activeFilter === filter && styles.filterChipActive,
               ]}
               onPress={() => handleSortPress(filter)}
+              disabled={!!sortLoadingFilter}
             >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  activeFilter === filter && styles.filterChipTextActive,
-                ]}
-              >
-                {filter}
-              </Text>
+              {sortLoadingFilter === filter ? (
+                <ActivityIndicator
+                  color={
+                    activeFilter === filter
+                      ? colors.onAccent
+                      : colors.textPrimary
+                  }
+                  size="small"
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    activeFilter === filter && styles.filterChipTextActive,
+                  ]}
+                >
+                  {filter}
+                </Text>
+              )}
             </Pressable>
           ))}
         </View>
@@ -732,12 +770,62 @@ export default function Home() {
           />
         ))}
 
-        {/* --- Free shipping promo --- */}
-        <ShippingBanner
-          colors={colors}
-          styles={styles}
-          onPress={() => notImplemented("Shipping Info")}
-        />
+        {/* --- Trust badges: shipping / returns / secure payment --- */}
+        <View style={styles.trustBadgesRow}>
+          <View style={styles.trustBadgeItem}>
+            <View style={styles.trustBadgeIconCircle}>
+              <MaterialCommunityIcons
+                name="truck-fast-outline"
+                size={20}
+                color={colors.accent}
+              />
+            </View>
+            <Text style={styles.trustBadgeLabel}>Free Shipping</Text>
+          </View>
+          <View style={styles.trustBadgeItem}>
+            <View style={styles.trustBadgeIconCircle}>
+              <MaterialCommunityIcons
+                name="backup-restore"
+                size={20}
+                color={colors.accent}
+              />
+            </View>
+            <Text style={styles.trustBadgeLabel}>Easy Returns</Text>
+          </View>
+          <View style={styles.trustBadgeItem}>
+            <View style={styles.trustBadgeIconCircle}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color={colors.accent}
+              />
+            </View>
+            <Text style={styles.trustBadgeLabel}>Secure Payment</Text>
+          </View>
+        </View>
+
+        {/* --- New Arrivals --- */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>New Arrivals</Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.newArrivalsRow}
+        >
+          {newArrivals.map((item) => (
+            <NewArrivalCard
+              key={item.id}
+              item={item}
+              colors={colors}
+              styles={styles}
+              isWishlisted={!!wishlistedIds[item.id]}
+              onToggleWishlist={toggleWishlist}
+              onPress={() => openProductDetails(item.id)}
+            />
+          ))}
+        </ScrollView>
       </ScrollView>
     </View>
   );
@@ -795,6 +883,9 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       height: 8,
       borderRadius: 4,
       backgroundColor: colors.accent,
+    },
+    bellButtonBusy: {
+      opacity: 0.7,
     },
 
     // --- Search bar + profile avatar ---
@@ -1146,39 +1237,95 @@ function getStyles(colors: ThemeColors, bannerWidth: number) {
       color: colors.accent,
     },
 
-    // --- Free shipping banner ---
-    shippingBanner: {
+    // --- Trust badges row ---
+    trustBadgesRow: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 14,
+      justifyContent: "space-between",
       backgroundColor: colors.cardBackground,
       borderRadius: 16,
-      padding: 14,
+      paddingVertical: 16,
+      paddingHorizontal: 8,
       marginTop: 8,
-      marginBottom: 20,
+      marginBottom: 28,
     },
-    shippingIconCircle: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+    trustBadgeItem: {
+      flex: 1,
+      alignItems: "center",
+      gap: 8,
+    },
+    trustBadgeIconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       backgroundColor: colors.background,
       alignItems: "center",
       justifyContent: "center",
     },
-    shippingTextWrapper: {
-      flex: 1,
-      gap: 2,
-    },
-    shippingTitle: {
-      fontFamily: Fonts.semiBold,
-      fontSize: 15,
+    trustBadgeLabel: {
+      fontFamily: Fonts.medium,
+      fontSize: 11,
       color: colors.textPrimary,
+      textAlign: "center",
     },
-    shippingSubtitle: {
-      fontFamily: Fonts.regular,
-      fontSize: 12,
-      lineHeight: 17,
-      color: colors.textMuted,
+
+    // --- New Arrivals ---
+    newArrivalsRow: {
+      gap: 12,
+      paddingBottom: 4,
+    },
+    newArrivalCard: {
+      width: 150,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 18,
+      padding: 10,
+    },
+    newArrivalBadge: {
+      position: "absolute",
+      top: 18,
+      left: 18,
+      zIndex: 1,
+      backgroundColor: colors.accent,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    newArrivalBadgeText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 10,
+      color: colors.onAccent,
+    },
+    newArrivalImage: {
+      width: "100%",
+      height: 110,
+      borderRadius: 12,
+      marginBottom: 10,
+    },
+    newArrivalWishlistButton: {
+      position: "absolute",
+      top: 18,
+      right: 18,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    newArrivalName: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 13,
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    newArrivalFooter: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    newArrivalPrice: {
+      fontFamily: Fonts.bold,
+      fontSize: 14,
+      color: colors.accent,
     },
   });
 }

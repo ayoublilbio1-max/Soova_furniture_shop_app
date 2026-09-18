@@ -3,11 +3,17 @@
 // Supabase/Cloudflare URL pairs) instead of deriving them from a relative
 // path. Retries the primary URL a few times to smooth over an Android
 // cold-start network issue, then switches to the fallback URL if it still
-// won't load.
+// won't load. If the fallback also exhausts its retries (e.g. genuinely
+// offline), shows a themed placeholder icon instead of a blank/broken
+// image — everything else in the app works fully offline already, so this
+// is a per-image fallback, not a blocking "you're offline" screen (see
+// NetworkStatusBanner for the app-wide non-blocking notice).
 
+import { useThemeColors } from "@/hooks/use-theme-colors";
+import { Ionicons } from "@expo/vector-icons";
 import { Image, ImageStyle } from "expo-image";
 import { useEffect, useRef, useState } from "react";
-import { StyleProp } from "react-native";
+import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
@@ -25,8 +31,10 @@ export function RemoteImage({
   style,
   contentFit = "cover",
 }: RemoteImageProps) {
+  const colors = useThemeColors();
   const [attempt, setAttempt] = useState(0);
   const [useFallback, setUseFallback] = useState(false);
+  const [failed, setFailed] = useState(false);
   const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -45,7 +53,23 @@ export function RemoteImage({
     } else if (!useFallback && fallbackUri) {
       setUseFallback(true);
       setAttempt(0);
+    } else {
+      setFailed(true);
     }
+  }
+
+  if (failed) {
+    return (
+      <View
+        style={[
+          style as StyleProp<ViewStyle>,
+          styles.placeholder,
+          { backgroundColor: colors.cardBackground },
+        ]}
+      >
+        <Ionicons name="image-outline" size={28} color={colors.textMuted} />
+      </View>
+    );
   }
 
   return (
@@ -59,3 +83,10 @@ export function RemoteImage({
     />
   );
 }
+
+const styles = StyleSheet.create({
+  placeholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

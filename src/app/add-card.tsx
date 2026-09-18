@@ -1,8 +1,8 @@
 // Add Card screen — live card preview above the form, with real inline
-// validation (card number length, expiry month range, CVV length) and
-// brand detection (Visa / Mastercard, by BIN prefix) reflected live in the
-// preview. Only the last four digits, holder name, expiry, and detected brand
-// are ever saved — never the full number or CVV.
+// validation (card number length, expiry month range, expiry not in the
+// past, CVV length) and brand detection (Visa / Mastercard, by BIN prefix)
+// reflected live in the preview. Only the last four digits, holder name,
+// expiry, and detected brand are ever saved — never the full number or CVV.
 
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
@@ -108,15 +108,35 @@ export default function AddCard() {
       : null;
 
   const expiryMonth = Number(expiryDigits.slice(0, 2));
+  const expiryYearTwoDigit = Number(expiryDigits.slice(2, 4));
+
+  // Cards are valid through the END of their expiry month, so a card
+  // expiring this month is still valid — only strictly earlier months
+  // (or earlier years) count as expired.
+  const isMonthInRange = expiryMonth >= 1 && expiryMonth <= 12;
+
+  const isExpired = (() => {
+    if (expiryDigits.length < 4 || !isMonthInRange) return false;
+
+    const fullExpiryYear = 2000 + expiryYearTwoDigit;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // getMonth() is 0-indexed
+
+    return (
+      fullExpiryYear < currentYear ||
+      (fullExpiryYear === currentYear && expiryMonth < currentMonth)
+    );
+  })();
 
   const expiryError =
-    touched.expiry &&
-    expiryDigits.length >= 2 &&
-    (expiryMonth < 1 || expiryMonth > 12)
+    touched.expiry && expiryDigits.length >= 2 && !isMonthInRange
       ? "Enter a valid month (01–12)"
       : touched.expiry && expiryDigits.length > 0 && expiryDigits.length < 4
         ? "Enter the full expiry date"
-        : null;
+        : touched.expiry && expiryDigits.length === 4 && isExpired
+          ? "This card has expired"
+          : null;
 
   const cvvError =
     touched.cvv && cvv.length > 0 && cvv.length < 3
@@ -127,8 +147,8 @@ export default function AddCard() {
     holderName.trim().length > 0 &&
     cardNumberDigits.length === 16 &&
     expiryDigits.length === 4 &&
-    expiryMonth >= 1 &&
-    expiryMonth <= 12 &&
+    isMonthInRange &&
+    !isExpired &&
     cvv.length === 3;
 
   function handleCardNumberChange(text: string) {

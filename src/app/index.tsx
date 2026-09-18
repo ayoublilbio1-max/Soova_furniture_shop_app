@@ -1,10 +1,15 @@
 // Welcome screen — hero image collage, headline, and the entry point into
-// the sign-up flow.
+// the sign-up flow. On cold start, waits for the profile store to
+// rehydrate, then skips straight to Home if onboarding (Sign In/Up >
+// Complete Profile > Location) was already completed in a previous
+// session — so returning users don't see this flow every time they open
+// the app.
 
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { router } from "expo-router";
+import { useProfileStore } from "@/store/profile-store";
+import { Redirect, router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -19,6 +24,9 @@ import {
 export default function Welcome() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
+
+  const hasHydrated = useProfileStore((s) => s.hasHydrated);
+  const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
 
   // --- Busy state for the primary CTA. Navigating to sign-up isn't
   // instant (that screen has to mount before the transition completes),
@@ -37,6 +45,17 @@ export default function Welcome() {
     InteractionManager.runAfterInteractions(() => {
       setIsNavigating(false);
     });
+  }
+
+  // --- Wait for AsyncStorage rehydration before deciding anything, so we
+  // never flash Welcome for an already-onboarded user (or redirect on a
+  // stale default before the real value has loaded). ---
+  if (!hasHydrated) {
+    return <View style={styles.container} />;
+  }
+
+  if (onboardingComplete) {
+    return <Redirect href="/(tabs)/home" />;
   }
 
   return (

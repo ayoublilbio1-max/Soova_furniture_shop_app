@@ -1,20 +1,23 @@
 // Payment Methods screen — Cash, saved cards, and (demo, unconnected)
-// PayPal/Apple Pay/Google Pay options. Confirm Payment triggers a deliberate
-// short delay before navigating, since instant confirmation would read as
-// fake for what's meant to feel like a real payment step. Confirming also
-// snapshots the order (placeOrder) and clears the live cart, matching
-// normal post-purchase behavior.
+// PayPal/Apple Pay/Google Pay options, shown via a styled modal instead of a
+// plain Alert. Reached two ways:
+// - From Checkout (no "mode" param): Confirm Payment runs the real purchase
+//   flow — snapshots the order (placeOrder), clears the cart, navigates to
+//   payment-success. Confirm has a deliberate short delay so it doesn't read
+//   as fake.
+// - From Account (?mode=manage): "Save Payment Method" just saves the
+//   selection and shows a brief success banner — no fake purchase, no
+//   navigation away.
 
 import { ThemeColors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { PaymentMethodId, SavedCard, useCartStore } from "@/store/cart-store";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -30,6 +33,13 @@ const visaLogo = require("@/assets/images/visa-default.webp");
 const mastercardLogo = require("@/assets/images/mastercard.webp");
 
 const CONFIRM_DELAY_MS = 1200;
+const SAVE_DELAY_MS = 600;
+
+type DemoModalInfo = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+};
 
 // --- Single selectable payment row (radio-style) ---
 function PaymentRow({
@@ -67,6 +77,8 @@ function PaymentRow({
 export default function PaymentMethods() {
   const colors = useThemeColors();
   const styles = getStyles(colors);
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isManageMode = params.mode === "manage";
 
   const savedCards = useCartStore((s) => s.savedCards);
 
@@ -83,17 +95,18 @@ export default function PaymentMethods() {
   );
 
   const [isConfirming, setIsConfirming] = useState(false);
+  const [saveSuccessVisible, setSaveSuccessVisible] = useState(false);
 
   // --- Styled remove-card confirmation ---
   const [pendingRemoveCard, setPendingRemoveCard] = useState<SavedCard | null>(
     null,
   );
 
-  function notImplemented(label: string) {
-    Alert.alert(
-      label,
-      "Soova is a portfolio demonstration, so this payment method isn't connected to a live provider. Cash and saved cards are fully functional for the demo.",
-    );
+  // --- Styled demo-limitation modal (replaces the old Alert) ---
+  const [demoModal, setDemoModal] = useState<DemoModalInfo | null>(null);
+
+  function openDemoModal(info: DemoModalInfo) {
+    setDemoModal(info);
   }
 
   function confirmRemoveCard() {
@@ -112,8 +125,16 @@ export default function PaymentMethods() {
     if (isConfirming) return;
 
     setIsConfirming(true);
-
     selectPaymentMethod(draftSelection);
+
+    if (isManageMode) {
+      setTimeout(() => {
+        setIsConfirming(false);
+        setSaveSuccessVisible(true);
+        setTimeout(() => setSaveSuccessVisible(false), 2000);
+      }, SAVE_DELAY_MS);
+      return;
+    }
 
     setTimeout(() => {
       placeOrder();
@@ -151,6 +172,13 @@ export default function PaymentMethods() {
 
   return (
     <View style={styles.container}>
+      {saveSuccessVisible && (
+        <View style={styles.banner}>
+          <Ionicons name="checkmark-circle" size={20} color={colors.onAccent} />
+          <Text style={styles.bannerText}>Payment method saved.</Text>
+        </View>
+      )}
+
       <View style={styles.header}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
@@ -225,7 +253,13 @@ export default function PaymentMethods() {
           selected={false}
           colors={colors}
           styles={styles}
-          onPress={() => notImplemented("PayPal")}
+          onPress={() =>
+            openDemoModal({
+              label: "PayPal",
+              icon: "logo-paypal",
+              color: "#003087",
+            })
+          }
         />
 
         <PaymentRow
@@ -236,7 +270,13 @@ export default function PaymentMethods() {
           selected={false}
           colors={colors}
           styles={styles}
-          onPress={() => notImplemented("Apple Pay")}
+          onPress={() =>
+            openDemoModal({
+              label: "Apple Pay",
+              icon: "logo-apple",
+              color: colors.textPrimary,
+            })
+          }
         />
 
         <PaymentRow
@@ -245,7 +285,13 @@ export default function PaymentMethods() {
           selected={false}
           colors={colors}
           styles={styles}
-          onPress={() => notImplemented("Google Pay")}
+          onPress={() =>
+            openDemoModal({
+              label: "Google Pay",
+              icon: "logo-google",
+              color: "#4285F4",
+            })
+          }
         />
       </ScrollView>
 
@@ -261,7 +307,9 @@ export default function PaymentMethods() {
           {isConfirming ? (
             <ActivityIndicator color={colors.onAccent} size="small" />
           ) : (
-            <Text style={styles.confirmButtonText}>Confirm Payment</Text>
+            <Text style={styles.confirmButtonText}>
+              {isManageMode ? "Save Payment Method" : "Confirm Payment"}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -311,6 +359,44 @@ export default function PaymentMethods() {
           </View>
         </View>
       </Modal>
+
+      {/* --- Demo-limitation modal for PayPal / Apple Pay / Google Pay —
+      centered dialog, not a bottom sheet like the remove-card confirm --- */}
+      <Modal
+        transparent
+        visible={!!demoModal}
+        animationType="fade"
+        onRequestClose={() => setDemoModal(null)}
+      >
+        <Pressable
+          style={styles.demoBackdrop}
+          onPress={() => setDemoModal(null)}
+        >
+          <Pressable style={styles.demoModalCard} onPress={() => {}}>
+            <View style={styles.demoIconCircle}>
+              {demoModal && (
+                <Ionicons
+                  name={demoModal.icon}
+                  size={28}
+                  color={demoModal.color}
+                />
+              )}
+            </View>
+            <Text style={styles.demoModalTitle}>{demoModal?.label}</Text>
+            <Text style={styles.demoModalBody}>
+              Soova is a portfolio demonstration, so this payment method
+              isn&apos;t connected to a live provider. Cash and saved cards are
+              fully functional for the demo.
+            </Text>
+            <Pressable
+              style={styles.demoGotItButton}
+              onPress={() => setDemoModal(null)}
+            >
+              <Text style={styles.demoGotItText}>Got It</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -321,6 +407,33 @@ function getStyles(colors: ThemeColors) {
       flex: 1,
       backgroundColor: colors.background,
       paddingTop: 60,
+    },
+
+    banner: {
+      position: "absolute",
+      top: 50,
+      left: 16,
+      right: 16,
+      zIndex: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.accent,
+      borderRadius: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      gap: 10,
+      shadowColor: "#000",
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+
+    bannerText: {
+      flex: 1,
+      fontFamily: Fonts.medium,
+      fontSize: 13,
+      color: colors.onAccent,
     },
 
     header: {
@@ -538,6 +651,65 @@ function getStyles(colors: ThemeColors) {
     },
 
     sheetConfirmText: {
+      fontFamily: Fonts.semiBold,
+      fontSize: 15,
+      color: colors.onAccent,
+    },
+
+    // --- Demo-limitation modal (PayPal / Apple Pay / Google Pay) — centered ---
+    demoBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+    },
+
+    demoModalCard: {
+      width: "100%",
+      backgroundColor: colors.background,
+      borderRadius: 24,
+      paddingHorizontal: 24,
+      paddingTop: 32,
+      paddingBottom: 32,
+      alignItems: "center",
+    },
+
+    demoIconCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.cardBackground,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+
+    demoModalTitle: {
+      fontFamily: Fonts.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
+
+    demoModalBody: {
+      fontFamily: Fonts.medium,
+      fontSize: 14,
+      color: colors.textMuted,
+      textAlign: "center",
+      marginBottom: 28,
+    },
+
+    demoGotItButton: {
+      width: "100%",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      paddingVertical: 16,
+    },
+
+    demoGotItText: {
       fontFamily: Fonts.semiBold,
       fontSize: 15,
       color: colors.onAccent,
